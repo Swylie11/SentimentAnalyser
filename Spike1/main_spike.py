@@ -4,6 +4,8 @@ all_inputs = [[1.1, 2, 3, 4],
               [1.2, 2.3, 0.3, 1.9],
               [0.2, 3.3, 0.7, 1.6]]
 
+correct_output = [0, 0, 1]
+
 
 class Layer:
     """ One layer of a neural network """
@@ -37,13 +39,17 @@ def softmax(input_matrix):
     input_matrix = np.exp(input_matrix)
 
     for i in range(len(input_matrix)):
-        total += input_matrix[i]
+        temp = []
+        total = 0
+        for n in range(len(input_matrix[i])):
+            total += input_matrix[i, n]
 
-    for i in range(len(input_matrix)):
-        output.append(input_matrix[i] / total)
+        for n in range(len(input_matrix[i])):
+            temp.append(float(input_matrix[i, n] / total))
+        output.append(temp)
     return output
 
 
 Neurons_l1 = Layer(all_inputs)
 print(Neurons_l1.batch_layer_output())
-print(softmax([1, 2, 8]))
+print(softmax(Neurons_l1.batch_layer_output()))
