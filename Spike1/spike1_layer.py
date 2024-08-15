@@ -4,8 +4,6 @@ all_inputs = [[1.1, 2, 3, 4],
               [1.2, 2.3, 0.3, 1.9],
               [0.2, 3.3, 0.7, 1.6]]
 
-correct_output = [0, 0, 1]
-
 
 class Layer:
     """ One layer of a neural network """
@@ -45,7 +43,7 @@ def softmax(input_matrix):
             total += input_matrix[i, n]  # Collect the sum of all values for the softmax calculation
 
         for n in range(len(input_matrix[i])):
-            temp.append(float(input_matrix[i, n] / total))  # Build a new list of probabilities
+            temp.append(float(input_matrix[i, n] / total))  # Build a new list of normalised probabilities
         output.append(temp)
     return output
 
