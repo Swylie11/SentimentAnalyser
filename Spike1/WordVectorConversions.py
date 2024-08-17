@@ -1,4 +1,5 @@
 import string
+import numpy as np
 
 
 def get_vector_line(word, embedding_file):
@@ -10,7 +11,9 @@ def get_vector_line(word, embedding_file):
             words = line.strip().split()
             if words[0] == word:
                 return line
-        print('Word not found')
+            file.close()
+        print('Word not found')  # If the word is not found, print not found and return nothing
+        file.close()
         return None
 
 
@@ -36,6 +39,8 @@ def format_entry_data(batch_input):
             if char not in string.punctuation and not char.isdigit():
                 cleaned_sentence += char
         cleaned_sentence = cleaned_sentence.replace('  ', ' ')  # Removes double spaces
+        cleaned_sentence = cleaned_sentence.replace('   ', ' ')  # Removes triple spaces
+        cleaned_sentence = cleaned_sentence.replace('    ', ' ')  # Removes quadruple spaces
         output_batch.append(cleaned_sentence)  # Adds the cleaned sentence to the output list
 
     return output_batch
@@ -54,13 +59,20 @@ def return_vector_matrix(list_input):
     return output_tensor
 
 
+def pad_matrix(tensor_input):
+    """ Pads an input matrix so that all entered lists are of length 200 ready for the convolution process """
+    to_pad = 200 - len(tensor_input[0])  # Finds how many words are left in for the word limit
+    for i in range(to_pad):
+        tensor_input[0].append(np.zeros(300))  # Adds fake words which have weights of all zeros
+    return tensor_input
+
+
 input_file_directory = ('C:/Users/samja/Documents/SchoolWork/ComputerScience/Project/SentimentAnalyser/Data'
                         '/WordEmbeddings.txt')
 
-print(format_entry_data(['Hello, World! This is a test sentence with numbers 12345 and punctuation!!!',
-                         'Hello, World! This is a test sentence with numbers 12345 and punctuation!!!',
-                         'Hello, World! This is a test sentence with numbers 12345 and punctuation!!!']))
+formatted_data = format_entry_data(['Hello, world! This is a test sentence with fifteen words and no numbers 12345 or '
+                                    'punctuation!!!'])
+vector_result = return_vector_matrix(formatted_data)
 
-print(return_vector_matrix(format_entry_data(['Hello, World! This is a test sentence with numbers 12345 and punctuation!!!',
-                                              'Hello, World! This is a test sentence with numbers 12345 and punctuation!!!',
-                                              'Hello, World! This is a test sentence with numbers 12345 and punctuation!!!'])))
+print(formatted_data)
+print(pad_matrix(vector_result))
