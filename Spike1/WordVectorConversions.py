@@ -27,12 +27,8 @@ def format_entry_data(batch_input):
     """ Converts a list of sentences in the wrong format into a list of cleaned sentences """
     output_batch = []
     for i in range(len(batch_input)):
-        # Convert to lowercase
-        sentence = batch_input[i].lower()
-
-        # Initialize an empty string for the cleaned sentence
+        sentence = batch_input[i].lower()  # Convert to lowercase
         cleaned_sentence = ""
-
         # Iterate through each character in the sentence
         for char in sentence:
             # Add to cleaned_sentence if char is not punctuation or a number
@@ -61,18 +57,20 @@ def return_vector_matrix(list_input):
 
 def pad_matrix(tensor_input):
     """ Pads an input matrix so that all entered lists are of length 200 ready for the convolution process """
-    to_pad = 200 - len(tensor_input[0])  # Finds how many words are left in for the word limit
-    for i in range(to_pad):
-        tensor_input[0].append(np.zeros(300))  # Adds fake words which have weights of all zeros
+    for n in range(len(tensor_input)):  # Iterates through all sentences provided
+        to_pad = 200 - len(tensor_input[n])  # Finds how many words are left in for the word limit
+        print(to_pad, n)
+        for i in range(to_pad):  # Iterates through all remaining 'empty' words in the list
+            tensor_input[n].append(np.zeros(300))  # Adds fake words which have weights of all zeros
     return tensor_input
 
 
 input_file_directory = ('C:/Users/samja/Documents/SchoolWork/ComputerScience/Project/SentimentAnalyser/Data'
                         '/WordEmbeddings.txt')
 
-formatted_data = format_entry_data(['Hello, world! This is a test sentence with fifteen words and no numbers 12345 or '
-                                    'punctuation!!!'])
+formatted_data = format_entry_data(['I like all people with hairy heads.', 'I do not like all people with hair'])
 vector_result = return_vector_matrix(formatted_data)
+padded_result = pad_matrix(vector_result)
 
 print(formatted_data)
-print(pad_matrix(vector_result))
+print(padded_result)
