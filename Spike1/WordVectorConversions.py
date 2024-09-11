@@ -37,6 +37,8 @@ def format_entry_data(batch_input):
         cleaned_sentence = cleaned_sentence.replace('  ', ' ')  # Removes double spaces
         cleaned_sentence = cleaned_sentence.replace('   ', ' ')  # Removes triple spaces
         cleaned_sentence = cleaned_sentence.replace('    ', ' ')  # Removes quadruple spaces
+        cleaned_sentence = cleaned_sentence.replace('     ', ' ')  # Removes quintuple spaces
+        cleaned_sentence = cleaned_sentence.replace('      ', ' ')  # Removes sextuple spaces
         output_batch.append(cleaned_sentence)  # Adds the cleaned sentence to the output list
 
     return output_batch
@@ -68,7 +70,7 @@ def pad_matrix(tensor_input):
 input_file_directory = ('C:/Users/samja/Documents/SchoolWork/ComputerScience/Project/SentimentAnalyser/Data'
                         '/WordEmbeddings.txt')
 
-formatted_data = format_entry_data(['I like all people with hairy heads.', 'I do not like all people with hair'])
+formatted_data = format_entry_data(['I like all people with hairy heads.', 'I do not like all people with hairy heads'])
 vector_result = return_vector_matrix(formatted_data)
 padded_result = pad_matrix(vector_result)
 

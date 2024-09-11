@@ -55,16 +55,22 @@ def clean_file(input_file, output_file):
 
 def write_as_jsonl(input_directory, output_directory):
     with open(input_directory, 'r', encoding='utf-8') as f:
-        with open(output_directory, 'w', encoding='utf-8') as e:
+        with open(output_directory, 'w', encoding='utf-8') as e:  # Opening both files
             for line in f:
-                e.writelines(f'{{"word": {line.strip().split()[0]}, "vector": {line.strip().split()[1:]}}}\n')
+                newArray = []
+                arrayStr = line.strip().split()[1:]
+                for n in range(len(arrayStr)):
+                    newArray.append(float(arrayStr[n]))  # Creates a new list from the dataset that is floats only
+                e.writelines(f'{{"word": "{line.strip().split()[0]}", "vector": {newArray}}}\n')
         e.close()
     f.close()
 
 
 # Example usage
-input_file_path = ('C:/Users/samja/Documents/SchoolWork/ComputerScience/Project/SentimentAnalyser/Data/WordEmbeddings.txt')
-output_file_path = ('C:/Users/samja/Documents/SchoolWork/ComputerScience/Project/SentimentAnalyser/Data/WordEmbeddings.jsonl')
+input_file_path = (
+    'C:/Users/samja/Documents/SchoolWork/ComputerScience/Project/SentimentAnalyser/Data/WordEmbeddings.txt')
+output_file_path = (
+    'C:/Users/samja/Documents/SchoolWork/ComputerScience/Project/SentimentAnalyser/Data/WordEmbeddings.jsonl')
 
 # Convert file line by line to dictionary
 # dictionary_input = file_to_dict(input_file_path)
@@ -75,4 +81,4 @@ output_file_path = ('C:/Users/samja/Documents/SchoolWork/ComputerScience/Project
 # Search raw data for unnecessary embeddings and remove them from file copy
 # clean_file(input_file_path, output_file_path)
 
-write_as_jsonl(input_file_path, output_file_path)
+# write_as_jsonl(input_file_path, output_file_path)
