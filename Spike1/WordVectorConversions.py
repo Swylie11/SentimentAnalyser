@@ -1,5 +1,8 @@
 import string
 import numpy as np
+import json
+from types import SimpleNamespace
+import time
 
 
 def get_vector_line(word, embedding_file):
@@ -15,6 +18,18 @@ def get_vector_line(word, embedding_file):
         print('Word not found')  # If the word is not found, print not found and return nothing
         file.close()
         return None
+
+
+def get_vector(target, embeddings):
+    with open(embeddings, 'r', encoding='utf-8') as f:
+        for line in f:
+            try:
+                embedding = json.loads(line, strict=False, object_hook=lambda d: SimpleNamespace(**d))
+                option = embedding.word
+                if option == target:
+                    return embedding.vector
+            except:
+                pass
 
 
 def get_embedding(line):
@@ -44,8 +59,8 @@ def format_entry_data(batch_input):
     return output_batch
 
 
-def return_vector_matrix(list_input):
-    """ Performs the get_embedding function for each word in a sentence and outputs the resulting matrix """
+def return_vector_matrix_txt(list_input):
+    """ Fetches the embeddings from the text file DO NOT USE"""
     output_tensor = []
     for i in range(len(list_input)):
         temp_matrix = []
@@ -53,6 +68,19 @@ def return_vector_matrix(list_input):
         words = sentence.strip().split()
         for n in range(len(words)):
             temp_matrix.append(get_embedding(get_vector_line(words[n], input_file_directory)))
+        output_tensor.append(temp_matrix)
+    return output_tensor
+
+
+def return_vector_matrix_jsonl(list_input):
+    """ Fetches the embeddings from a jsonl file """
+    output_tensor = []
+    for i in range(len(list_input)):
+        temp_matrix = []
+        sentence = list_input[i]
+        words = sentence.strip().split()
+        for n in range(len(words)):
+            temp_matrix.append(get_vector(words[n], input_file_directory))
         output_tensor.append(temp_matrix)
     return output_tensor
 
@@ -67,12 +95,23 @@ def pad_matrix(tensor_input):
     return tensor_input
 
 
-input_file_directory = ('C:/Users/samja/Documents/SchoolWork/ComputerScience/Project/SentimentAnalyser/Data'
-                        '/WordEmbeddings.txt')
-
 formatted_data = format_entry_data(['I like all people with hairy heads.', 'I do not like all people with hairy heads'])
-vector_result = return_vector_matrix(formatted_data)
-padded_result = pad_matrix(vector_result)
 
+# This is purely for comparison purposes
+choice = int(input('Choose file search method\n1. Text file\n2. Jsonl file\n'))
+if choice == 1:
+    input_file_directory = ('C:/Users/samja/Documents/SchoolWork/ComputerScience/Project/SentimentAnalyser/Data'
+                            '/WordEmbeddings.txt')
+    start = time.time()
+    vector_result = return_vector_matrix_txt(formatted_data)
+else:
+    input_file_directory = ('C:/Users/samja/Documents/SchoolWork/ComputerScience/Project/SentimentAnalyser/Data'
+                            '/WordEmbeddings.jsonl')
+    start = time.time()
+    vector_result = return_vector_matrix_jsonl(formatted_data)
+
+padded_result = pad_matrix(vector_result)
 print(formatted_data)
 print(padded_result)
+end = time.time()
+print(f'Time elapsed = {end - start}')
