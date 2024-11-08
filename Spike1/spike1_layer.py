@@ -19,7 +19,7 @@ class Layer:
     def layer_output(self):
         """ This function outputs the result for a one dimensional input vector """
         output = []
-        for neuron_n in range(3):
+        for neuron_n in range(len(self.inputs)):
             neuron_output = float(np.dot(self.inputs, self.weights[neuron_n]) + self.biases[neuron_n])
             output.append(neuron_output)
         return output
