@@ -2,7 +2,6 @@ import string
 import numpy as np
 import json
 from types import SimpleNamespace
-import time
 
 
 def get_vector_line(word, embedding_file):
@@ -22,10 +21,13 @@ def get_vector_line(word, embedding_file):
 
 def get_vector(target, embeddings):
     with open(embeddings, 'r', encoding='utf-8') as f:
+        count = 0
         for line in f:
             try:
                 embedding = json.loads(line, strict=False, object_hook=lambda d: SimpleNamespace(**d))
                 option = embedding.word
+                count += 1
+                print(f'Words checked: {count}')
                 if option == target:
                     return embedding.vector
             except:
@@ -95,9 +97,13 @@ def pad_matrix(tensor_input):
     return tensor_input
 
 
-formatted_data = format_entry_data(['I like all people with hairy heads.', 'I do not like all people with hairy heads'])
+input_file_directory = ('C:/Users/samja/Documents/SchoolWork/ComputerScience/Project/SentimentAnalyser/Data'
+                        '/WordEmbeddings.jsonl')
 
+'''
 # This is purely for comparison purposes
+formatted_data = format_entry_data(['The tall man walked across the field'])
+
 choice = int(input('Choose file search method\n1. Text file\n2. Jsonl file\n'))
 if choice == 1:
     input_file_directory = ('C:/Users/samja/Documents/SchoolWork/ComputerScience/Project/SentimentAnalyser/Data'
@@ -111,7 +117,20 @@ else:
     vector_result = return_vector_matrix_jsonl(formatted_data)
 
 padded_result = pad_matrix(vector_result)
+end = time.time()
+print(padded_result)
+print(f'Time elapsed: {end - start}')
+
+input_file_directory = ('C:/Users/samja/Documents/SchoolWork/ComputerScience/Project/SentimentAnalyser/Data'
+                        '/WordEmbeddings.jsonl')
+
+
+
+start = time.time()
 print(formatted_data)
+vector_result = return_vector_matrix_jsonl(formatted_data)
+padded_result = pad_matrix(vector_result)
 print(padded_result)
 end = time.time()
 print(f'Time elapsed = {end - start}')
+'''
