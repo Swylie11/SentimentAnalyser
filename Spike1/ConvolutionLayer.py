@@ -24,7 +24,7 @@ class ConvLayer:
         """ This functions takes input of a matrix and a kernel and extends
         the input matrix in accordance with the size of the kernel"""
         for i in range(len(inputMatrix)):  # For every row in the input matrix
-            buffer = len(kernel) - 1  # How many rows to be added
+            buffer = len(kernel)//2  # How many rows to be added
             newArr = inputMatrix[i][:buffer]  # First half of the matrix
             for n in range(len(newArr)):
                 inputMatrix[i].insert(0, newArr[n])  # Adds the items in the new array in reverse order to the matrix
@@ -32,7 +32,7 @@ class ConvLayer:
             newArr.reverse()
             for n in range(len(newArr)):
                 inputMatrix[i].insert(len(inputMatrix[i]), newArr[n])
-        buffer = len(kernel)-1
+        buffer = len(kernel)//2
         newArr = inputMatrix[:buffer]  # First len(kernel)-1 rows in the input matrix
         for i in range(len(newArr)):
             inputMatrix.insert(0, newArr[i])  # Adding the new matrix to the start of the input matrix
@@ -43,4 +43,5 @@ class ConvLayer:
         return inputMatrix  # Returns the reflected input matrix
 
     def convPass(self, inputMatrix, kernel):
+        """ This functions performs a convolution of the input matrix with the kernel """
         pass
