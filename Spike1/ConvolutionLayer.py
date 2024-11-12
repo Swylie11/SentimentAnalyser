@@ -42,6 +42,30 @@ class ConvLayer:
             inputMatrix.insert(len(inputMatrix), newArr[i])  # Adding the new matrix to the end of the input matrix
         return inputMatrix  # Returns the reflected input matrix
 
-    def convPass(self, inputMatrix, kernel):
-        """ This functions performs a convolution of the input matrix with the kernel """
-        pass
+    def convPass(self, matrix, kernel, stepSize):
+        """ This functions performs a convolution of an input matrix with a kernel using a specified step size """
+        padding = len(kernel) // 2  # Finds what number the indexes need to be incremented by
+        output = []
+        for r in range(padding, len(matrix), stepSize):  # Starting at the padded value, up to the length of the matrix
+            output1 = []
+            currentTotal = 0
+            if r > (len(matrix) - padding - 1) and (r - (len(matrix) - padding - 1) != r):
+                #  If r is indexed further than the padding allows and this multiplication hasn't already happened
+                r = len(matrix) - padding - 1
+            elif r > (len(matrix) - padding - 1):
+                break
+            for i in range(padding, len(matrix[0]), stepSize):
+                # For as many sets of column multiplications are to be completed
+                if i > (len(matrix[0]) - padding - 1) and (i - (len(matrix[0]) - padding - 1) != i):
+                    #  If i is indexed further than the padding allows and this multiplication hasn't already happened
+                    i = len(matrix[0]) - padding - 1  # set i to the furthest possible value
+                elif i > (len(matrix[0]) - padding - 1):
+                    # if i is greater than the furthest possible value stop the algorithm
+                    break
+                for n in range(len(kernel)):  # For each list in the kernel
+                    for k in range(len(kernel[n])):  # For each item (k) in the nth list of the kernel
+                        product = kernel[n][k] * matrix[n+r-padding][k+i-padding]
+                        currentTotal += product
+                output1.append(currentTotal)
+            output.append(output1)
+        return output
