@@ -93,7 +93,7 @@ def pad_matrix(tensor_input):
         to_pad = 200 - len(tensor_input[n])  # Finds how many words are left in for the word limit
         print(to_pad, n)
         for i in range(to_pad):  # Iterates through all remaining 'empty' words in the list
-            tensor_input[n].append(np.zeros(300))  # Adds fake words which have weights of all zeros
+            tensor_input[n].append(np.zeros(300).tolist())  # Adds fake words which have weights of all zeros
     return tensor_input
 
 
