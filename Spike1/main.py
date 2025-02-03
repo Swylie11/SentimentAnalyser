@@ -17,8 +17,6 @@ convLayer2.fetchKernel(kernel_file)
 convLayer3.fetchKernel(kernel_file)
 
 # Defining the neural layers
-neurons_file = "C:/Users/samja/Documents/SchoolWork/ComputerScience/Project/SentimentAnalyser/Data/Neural_Values.jsonl"
-
 neuralLayer1 = NeuralLayer(1)
 neuralLayer2 = NeuralLayer(2)
 neuralLayer3 = NeuralLayer(3)
@@ -26,12 +24,12 @@ neuralLayer4 = NeuralLayer(4)
 neuralLayer5 = NeuralLayer(5)
 outputLayer = NeuralLayer(6)
 
-neuralLayer1.fetch_values(neurons_file)
-neuralLayer2.fetch_values(neurons_file)
-neuralLayer3.fetch_values(neurons_file)
-neuralLayer4.fetch_values(neurons_file)
-neuralLayer5.fetch_values(neurons_file)
-outputLayer.fetch_values(neurons_file)
+neuralLayer1.fetch_values()
+neuralLayer2.fetch_values()
+neuralLayer3.fetch_values()
+neuralLayer4.fetch_values()
+neuralLayer5.fetch_values()
+outputLayer.fetch_values()
 
 
 def fetch_test_data(test_data, batch_size):
@@ -61,11 +59,12 @@ def tensor_to_matrix(inputTensor):
     return outputMatrix
 
 
+# Fetching batch input
+batch = int(input("Enter batch size: "))  # Lets the user control the batch size
+
 # Start timer
 start = time.time()
 
-# Fetching batch input
-batch = int(input("Enter batch size: "))  # Lets the user control the batch size
 test_data_file = 'C:/Users/samja/Documents/SchoolWork/ComputerScience/Project/SentimentAnalyser/Data/TestData.jsonl'
 entry_data = fetch_test_data(test_data_file, batch)
 

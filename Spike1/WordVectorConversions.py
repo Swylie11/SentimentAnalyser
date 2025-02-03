@@ -2,6 +2,7 @@ import string
 import numpy as np
 import json
 from types import SimpleNamespace
+import Comms as com
 
 
 def get_vector_line(word, embedding_file):
@@ -19,6 +20,7 @@ def get_vector_line(word, embedding_file):
         return None
 
 
+# Obsolete
 def get_vector(target, embeddings):
     with open(embeddings, 'r', encoding='utf-8') as f:
         count = 0
@@ -32,6 +34,10 @@ def get_vector(target, embeddings):
                     return embedding.vector
             except:
                 pass
+
+
+def get_vector2(target):
+    return com.fetch_embedding(target)
 
 
 def get_embedding(line):
@@ -61,6 +67,7 @@ def format_entry_data(batch_input):
     return output_batch
 
 
+# Obsolete
 def return_vector_matrix_txt(list_input):
     """ Fetches the embeddings from the text file DO NOT USE"""
     output_tensor = []
@@ -82,7 +89,7 @@ def return_vector_matrix_jsonl(list_input):
         sentence = list_input[i]
         words = sentence.strip().split()
         for n in range(len(words)):
-            temp_matrix.append(get_vector(words[n], input_file_directory))
+            temp_matrix.append(get_vector2(words[n]))  # input_file_directory))
         output_tensor.append(temp_matrix)
     return output_tensor
 
