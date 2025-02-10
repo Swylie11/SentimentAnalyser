@@ -18,7 +18,10 @@ class NeuralLayer:
         self.weights = None
         self.biases = None
         self.drelu_di = None
+        self.averageLoss = None
+        self.network_output = None
 
+    # Obsolete
     def fetch_values2(self, file):
         changed = False
         with open(file, 'r', encoding='utf-8') as f:
@@ -50,14 +53,21 @@ class NeuralLayer:
 
     def batch_layer_output(self, inputs):
         """ This function outputs the result for one batch of one dimensional input vectors """
+        self.inputs = inputs
         self.layer_output = np.dot(inputs, np.array(self.weights).T) + self.biases
-        self. output = np.maximum(0, self.layer_output)  # Applying the ReLU function 'zeros' out the negative values
+        self.output = np.maximum(0, self.layer_output)  # Applying the ReLU function 'zeros' out the negative values
         return self.output
 
-    def softmax(self, input_matrix):
+    def softmax(self, inputs):
         """ Softmax calculation for batch input data as a 3-dimensional matrix """
+
+        # Computing the layer output
+        self.inputs = inputs
+        self.layer_output = np.dot(inputs, np.array(self.weights).T) + self.biases
+        self.network_output = self.layer_output
+
         output = []
-        input_matrix = np.exp(input_matrix)  # Finding the exponential of each input value
+        input_matrix = np.exp(self.layer_output)  # Finding the exponential of each input value
 
         for i in range(len(input_matrix)):  # For each 2-dimensional list in the input vector
             temp = []
@@ -69,20 +79,21 @@ class NeuralLayer:
                 temp.append(float(input_matrix[i, n] / total))  # Build a new list of normalised probabilities
             output.append(temp)
         self.softmax_output = output  # Assigning the result to a variable for use in backpropagation
-        return output
+        return [self.network_output, output]
 
-    @staticmethod
-    def ccel_calculation(input_distribution_matrix, correct_distribution_matrix):
+    def ccel_calculation(self, correct_distribution_matrix):
         """ Categorical cross entropy loss calculation """
         output_losses = []
         for i in range(len(correct_distribution_matrix)):  # For each list in the correct distribution matrix
             for n in range(len(correct_distribution_matrix[i])):  # For each item in the selected list from the matrix
                 if correct_distribution_matrix[i][n] == 1:
                     # Searching for the index of the ground truth in the ideal output distribution
-                    ccel = float(-(np.log(input_distribution_matrix[i][n])))  # loss calculation
+                    ccel = float(-(np.log(self.softmax_output[i][n])))  # loss calculation
                     output_losses.append(ccel)
+        self.averageLoss = sum(output_losses)/len(output_losses)
         return output_losses
 
+    # Obsolete
     @staticmethod
     def ccel_derivative(correct_distribution, softmax_output):
         """ Calculates the normalised derivative of the loss function  """
@@ -97,30 +108,59 @@ class NeuralLayer:
 
         # convert one hot encoded vectors to the index location of the correct class instead
         correct_distribution = np.argmax(correct_distribution, axis=1)
-        self.softmax_copy = self.softmax_output
+        self.softmax_copy = np.array(self.softmax_output)
 
         # Subtract 1 from the softmax output index that is the same as the correct index
         # This is the derivative
         self.softmax_copy[range(batch_size), correct_distribution] -= 1
         self.softmax_copy = self.softmax_copy / batch_size  # Normalise the results
+        return self.softmax_copy
 
     def ReLU_derivative(self):
-        """ Computes a matrix of derivatives of the relu function where
-        self.layer_output is the batch output from a current layer"""
 
-        weights_copy = self.weights.T
+        batch_drelu = []
 
-        drelu = self.output  # Copying outputs so that they don't get changed
-        # Where the output from the network is less than 0, set the relu derivative to 0, otherwise the output
-        drelu[self.layer_output <= 0] = 0
+        for i in range(len(self.inputs)):
 
-        # Calculating derivatives as matrices thus a batch
-        dinputs = np.dot(drelu, weights_copy.T)
-        dweights = np.dot(self.inputs.T, drelu)
-        dbiases = np.sum(drelu, axis=0, keepdims=True)
+            drelu = self.output[i]
 
-        print(self.weights)
-        self.weights += -0.001 * dweights
-        print(self.weights)
+            drelu[self.output[i] <= 0] = 0
+            batch_drelu.append(drelu)
 
-        ''' PARAMETER UPDATING NEEDED HERE '''
+        return batch_drelu
+
+    def calculate_derivatives(self, dvalues):
+        """ Computes a matrix of derivatives of the relu function, inputs, weights and biases then
+        updates the weights and biases for a given layer in an external database"""
+
+        # Creating data structures
+        weights_copy = np.array(self.weights).T
+        batch_dinputs = []
+        batch_dweights = []
+        batch_dbiases = []
+
+        # For each input (computing once per sentence)
+        for i in range(len(self.inputs)):
+
+            dvalue = dvalues[i]
+
+            # Calculating derivatives as matrices thus a batch
+            dinputs = np.dot(dvalue, weights_copy.T)
+            dweights = np.dot(np.array(self.inputs[i][i]), dvalue)
+            dbiases = np.sum(dvalue, axis=0, keepdims=True)
+
+            # Updating batches of differentials
+            batch_dinputs.append(dinputs)
+            batch_dweights.append(dweights)
+            batch_dbiases.append(dbiases)
+
+        # Calculating averages
+        avdweights = sum(batch_dweights)/len(batch_dweights)
+        avdbiases = sum(batch_dbiases)/len(batch_dbiases)
+        avdinputs = sum(batch_dinputs)/len(batch_dinputs)
+
+        # Setting new weights and biases and updating them
+        new_weights = weights_copy - (0.01 * avdweights)
+        new_biases = self.biases - (0.01 * avdbiases)
+
+        com.update_values(self.layerNum, new_weights.T.tolist(), new_biases.tolist())

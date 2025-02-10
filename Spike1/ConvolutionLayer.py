@@ -1,5 +1,6 @@
 import json
 from types import SimpleNamespace
+import Comms as com
 
 
 class ConvLayer:
@@ -8,7 +9,8 @@ class ConvLayer:
         self.stepSize = stepSize
         self.kernel = None
 
-    def fetchKernel(self, file):
+    # Obsolete
+    def fetch_Kernel(self, file):
         changed = False
         with open(file, 'r', encoding='utf-8') as f:
             for line in f:
@@ -21,6 +23,9 @@ class ConvLayer:
                         changed = True
                 except:
                     print("Invalid layer number")
+
+    def fetchKernel(self):
+        self.kernel = com.fetch_kernel(self.layerNum)
 
     def reflectMatrix(self, inputBatch):
         """ This functions takes input of a matrix and a kernel and extends
