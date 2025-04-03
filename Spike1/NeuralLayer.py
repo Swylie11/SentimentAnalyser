@@ -40,9 +40,10 @@ class NeuralLayer:
         """ Calls the SQL query in Comms.py and fetches the weights and biases """
         values = com.fetch_layer(self.layerNum)
         self.weights = values[0]
+        print(f'Layer: {self.layerNum}, weights: {np.array(self.weights).shape}')
         self.biases = values[1]
 
-    def layer_output(self, inputs):
+    def layer_output1(self, inputs):
         """ This function outputs the result for a one dimensional input vector """
         self.inputs = inputs
         output = []
@@ -66,9 +67,12 @@ class NeuralLayer:
         self.layer_output = np.dot(inputs, np.array(self.weights).T) + self.biases
         self.network_output = self.layer_output
 
-        output = []
+        # Softmax calculation
         input_matrix = np.exp(self.layer_output)  # Finding the exponential of each input value
 
+        self.softmax_output = input_matrix / (sum(input_matrix[0]))
+
+        '''
         for i in range(len(input_matrix)):  # For each 2-dimensional list in the input vector
             temp = []
             total = 0
@@ -77,9 +81,11 @@ class NeuralLayer:
 
             for n in range(len(input_matrix[i])):
                 temp.append(float(input_matrix[i, n] / total))  # Build a new list of normalised probabilities
-            output.append(temp)
-        self.softmax_output = output  # Assigning the result to a variable for use in backpropagation
-        return [self.network_output, output]
+            output2.append(temp)
+        self.softmax_output = output2  # Assigning the result to a variable for use in backpropagation
+        '''
+
+        return [self.network_output, self.softmax_output]
 
     def ccel_calculation(self, correct_distribution_matrix):
         """ Categorical cross entropy loss calculation """
@@ -143,10 +149,13 @@ class NeuralLayer:
         for i in range(len(self.inputs)):
 
             dvalue = dvalues[i]
+            dvalue = np.array(dvalue).reshape(1, -1)
+            inputs2 = self.inputs[i]
+            inputs = np.array(inputs2).reshape(1, -1)
 
             # Calculating derivatives as matrices thus a batch
             dinputs = np.dot(dvalue, weights_copy.T)
-            dweights = np.dot(np.array(self.inputs[i][i]), dvalue)
+            dweights = np.dot(inputs.T, dvalue)
             dbiases = np.sum(dvalue, axis=0, keepdims=True)
 
             # Updating batches of differentials
@@ -164,3 +173,5 @@ class NeuralLayer:
         new_biases = self.biases - (0.01 * avdbiases)
 
         com.update_values(self.layerNum, new_weights.T.tolist(), new_biases.tolist())
+
+        return batch_dinputs
