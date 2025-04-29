@@ -13,6 +13,8 @@ class ConvLayer:
         self.kernel = None
         self.inputs = None
         self.reflected_input = None
+        self.filter_derivatives = None
+        self.input_derivatives = None
 
     # Obsolete
     def fetch_Kernel(self, file):
@@ -31,6 +33,26 @@ class ConvLayer:
 
     def fetchKernel(self):
         self.kernel = com.fetch_kernel(self.layerNum)
+        self.filter_derivatives = np.zeros_like(self.kernel)
+        self.input_derivatives = np.zeros_like(None)
+
+    def initialize_values(self):
+        self.fetchKernel()
+
+        # Initializing kernel using glorot method
+        self.kernel = self.glorot_normal_kernel(self.kernel).tolist()
+
+        # Updating the database with the new kernel
+        com.update_kernel(self.kernel, self.layerNum)
+
+    @staticmethod
+    def glorot_normal_kernel(kernel):
+        neurons_in = len(kernel)
+        neurons_out = len(kernel[0])
+        standard_dev = np.sqrt(2 / (neurons_in + neurons_out))  # Standard dev calculation
+
+        # Returning normal dist of correct shape, the ouptut size will be 5x5 or 3x3
+        return np.random.normal(0, standard_dev, (neurons_in, neurons_out))
 
     def reflectMatrix(self, inputBatch):
         """ This functions takes input of a matrix and a kernel and extends
@@ -142,23 +164,23 @@ class ConvLayer:
         rotated_kernel = np.rot90(np.array(kernelTemp), 2).tolist()
 
         # Filter derivs calculation
-        filter_derivatives = self.calculate_kernel_derivatives(self.inputs[0], self.kernel, kernelTemp, stepS)
+        self.filter_derivatives = np.add(self.filter_derivatives, np.array(self.calculate_kernel_derivatives(self.inputs[0], self.kernel, kernelTemp, stepS)))
 
         # Calculating input derivatives
         spread_dvalues = self.spread_matrix(self.inputs[0], self.kernel, stepS)
-        input_derivatives = correlate2d(spread_dvalues.tolist(), rotated_kernel, mode='valid')
-
-        # Adjusting the kernels according to the kernel derivatives
-        new_kernel = np.subtract(np.array(kernelTemp), np.multiply(0.01, filter_derivatives)).tolist()
-
-        # Updating the database with the new kernel made in the prev. statement.
-        com.update_kernel(new_kernel, self.layerNum)
+        self.input_derivatives = np.add(self.input_derivatives, np.array(correlate2d(spread_dvalues.tolist(), rotated_kernel, mode='valid')))
 
         # returning the kernel and step size back to normal
-        self.kernel = new_kernel
+        self.kernel = kernelTemp
         self.stepSize = stepS
 
-        output = np.array([np.array(input_derivatives).tolist()])
+        output = np.array([np.array(self.input_derivatives).tolist()])
 
-        # Returning the input derivatives for use in the next backpropagation layer
+        # Returning derivatives for use in the next backpropagation layer and value editing
         return output
+
+    def adjust_kernel_values(self, batch_size):
+        """ Calculates new kernel based on derivative values """
+        self.kernel = np.subtract(np.array(self.kernel), np.multiply(0.01, np.divide(self.filter_derivatives, batch_size))).tolist()
+
+        com.update_kernel(self.kernel, self.layerNum)

@@ -96,10 +96,11 @@ def return_vector_matrix_jsonl(list_input):
 
 def pad_matrix(tensor_input):
     """ Pads an input matrix so that all entered lists are of length 200 ready for the convolution process """
+    blue = np.arange(300)  # Blueprint for size of filled value matrix
     for n in range(len(tensor_input)):  # Iterates through all sentences provided
         to_pad = 200 - len(tensor_input[n])  # Finds how many words are left in for the word limit
         for i in range(to_pad):  # Iterates through all remaining 'empty' words in the list
-            tensor_input[n].append(np.zeros(300).tolist())  # Adds fake words which have weights of all zeros
+            tensor_input[n].append(np.full_like(blue, 0.001, dtype=np.double).tolist())  # Adds fake words which have weights of tiny values top avoid dead neurons
     return tensor_input
 
 

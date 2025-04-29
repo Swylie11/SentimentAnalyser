@@ -20,6 +20,8 @@ class NeuralLayer:
         self.drelu_di = None
         self.averageLoss = None
         self.network_output = None
+        self.avdweights = None
+        self.avdbiases = None
 
     # Obsolete
     def fetch_values2(self, file):
@@ -37,11 +39,34 @@ class NeuralLayer:
                 print("Invalid layer number")
 
     def fetch_values(self):
-        """ Calls the SQL query in Comms.py and fetches the weights and biases """
+        """ Calls the SQL query in Comms.py and fetches the
+        weights and biases, also initializes backpropagation matrix"""
         values = com.fetch_layer(self.layerNum)
         self.weights = values[0]
-        print(f'Layer: {self.layerNum}, weights: {np.array(self.weights).shape}')
         self.biases = values[1]
+        self.avdweights = np.zeros_like(np.array(self.weights).T)
+        self.avdbiases = np.zeros_like(self.biases)
+
+    def initialise_values(self):
+        values = com.fetch_layer(self.layerNum)  # Fetching values for neural layer shape
+        self.weights = values[0]
+        self.biases = values[1]
+        neurons_in = len(self.weights)  # Neurons in prev layer
+        neurons_out = len(self.weights[0])  # Neurons in current layer
+
+        # Weight initialisation
+        self.weights = self.glorot_normal(neurons_in, neurons_out)
+
+        # Bias initialisation
+        self.biases = np.full_like(self.biases, 0.01)
+
+        # Database update
+        com.update_values(self.layerNum, self.weights.tolist(), self.biases.tolist())
+
+    @staticmethod
+    def glorot_normal(n_in, n_out):
+        standard_dev = np.sqrt(2 / (n_in + n_out))
+        return np.random.normal(0, standard_dev, (n_in, n_out))
 
     def layer_output1(self, inputs):
         """ This function outputs the result for a one dimensional input vector """
@@ -164,14 +189,20 @@ class NeuralLayer:
             batch_dbiases.append(dbiases)
 
         # Calculating averages
-        avdweights = sum(batch_dweights)/len(batch_dweights)
-        avdbiases = sum(batch_dbiases)/len(batch_dbiases)
+        self.avdweights = np.add(self.avdweights, np.array(sum(batch_dweights)/len(batch_dweights)))
+        self.avdbiases = np.add(self.avdbiases, np.array(sum(batch_dbiases)/len(batch_dbiases)))
         avdinputs = sum(batch_dinputs)/len(batch_dinputs)
 
-        # Setting new weights and biases and updating them
-        new_weights = weights_copy - (0.01 * avdweights)
-        new_biases = self.biases - (0.01 * avdbiases)
+        return avdinputs
 
+    def adjust_values(self, batch_size):
+        """ Adjusts the weights and biases in the network based on current running derivatives """
+        weights_copy = np.array(self.weights).T  # Copy required as weights is not saved transposed
+
+        # Adjusting values
+        new_weights = np.subtract(weights_copy, np.multiply(0.01, np.divide(self.avdweights, batch_size)))
+        new_biases = np.subtract(self.biases, np.multiply(0.01, np.divide(self.avdbiases, batch_size)))[0]
+
+        # Updating values
         com.update_values(self.layerNum, new_weights.T.tolist(), new_biases.tolist())
 
-        return batch_dinputs
