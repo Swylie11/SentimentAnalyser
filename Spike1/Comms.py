@@ -7,42 +7,57 @@ import numpy as np
 
 
 def fetch_kernel(LayerNum):
-    """ Searches a database table for a layer and returns its respective kernel """
+    import os, sqlite3, ast
+    # use DB file next to this module to avoid working-dir issues
+    db_path = os.path.join(os.path.dirname(__file__), "convolution_layers.db")
+    if not os.path.exists(db_path):
+        raise FileNotFoundError(f"Database not found: {db_path}")
 
-    # Database connection
-    conn2 = sqlite3.connect("convolution_layers.db")
-    kernel_cursor = conn2.cursor()
+    conn2 = sqlite3.connect(db_path)
+    cur = conn2.cursor()
 
-    # SQL query
-    kernel_cursor.execute("SELECT kernel FROM kernels WHERE LayerNum = ?", (LayerNum,))
-    kernel = ast.literal_eval(kernel_cursor.fetchone()[0])  # Array conversion
+    # verify table exists
+    cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='kernels'")
+    if cur.fetchone() is None:
+        # list existing tables for debugging
+        cur.execute("SELECT name FROM sqlite_master WHERE type='table'")
+        tables = [r[0] for r in cur.fetchall()]
+        conn2.close()
+        raise RuntimeError(f"Table 'kernels' not found in {db_path}. existing tables: {tables}")
 
-    conn2.commit()
+    # fetch kernel row
+    cur.execute("SELECT kernel FROM kernels WHERE LayerNum = ?", (LayerNum,))
+    row = cur.fetchone()
     conn2.close()
-
-    return kernel
+    if row is None:
+        raise LookupError(f"No kernel row for LayerNum={LayerNum} in {db_path}.")
+    return ast.literal_eval(row[0])
 
 
 def fetch_layer(LayerNum):
-    """ Collects the weights and biases for a given layer from an external database then encodes them in an array """
+    import os, sqlite3, ast
+    db_path = os.path.join(os.path.dirname(__file__), "neuron_weights.db")
+    if not os.path.exists(db_path):
+        raise FileNotFoundError(f"Database not found: {db_path}")
 
-    # Database connection
-    conn1 = sqlite3.connect("neuron_weights.db")
-    neural_cursor = conn1.cursor()
+    conn = sqlite3.connect(db_path)
+    cur = conn.cursor()
 
-    # SQL queries
-    neural_cursor.execute("SELECT weights FROM weights WHERE LayerNum = ?", (LayerNum,))
-    weights = ast.literal_eval(neural_cursor.fetchone()[0])  # Array conversion
+    cur.execute("SELECT weights FROM weights WHERE LayerNum = ?", (LayerNum,))
+    row = cur.fetchone()
+    if row is None:
+        conn.close()
+        raise LookupError(f"No weights row for LayerNum={LayerNum} in {db_path}.")
+    weights = ast.literal_eval(row[0])
 
-    neural_cursor.execute("SELECT biases FROM weights WHERE LayerNum = ?", (LayerNum,))
-    biases = ast.literal_eval(neural_cursor.fetchone()[0])  # Array conversion
+    cur.execute("SELECT biases FROM weights WHERE LayerNum = ?", (LayerNum,))
+    row2 = cur.fetchone()
+    conn.close()
+    if row2 is None:
+        raise LookupError(f"No biases row for LayerNum={LayerNum} in {db_path}.")
+    biases = ast.literal_eval(row2[0])
 
-    conn1.commit()
-    conn1.close()
-
-    # Data encoding into a new array
-    layerValues = [weights, biases]
-    return layerValues
+    return [weights, biases]
 
 
 def format_data(encoded_data_file):
@@ -100,75 +115,77 @@ def format_data(encoded_data_file):
 
 
 def fetch_embedding(word):
-    """ Grabs the vector representation of a word from an external database """
+    import os, sqlite3, ast, numpy as np
+    db_path = os.path.join(os.path.dirname(__file__), "word_embeddings.db")
+    if not os.path.exists(db_path):
+        raise FileNotFoundError(f"Database not found: {db_path}")
 
-    # Establishing connection
-    conn3 = sqlite3.connect('word_embeddings.db')
-    curr = conn3.cursor()
+    conn = sqlite3.connect(db_path)
+    cur = conn.cursor()
+    cur.execute("SELECT embedding FROM embeddings WHERE word = ?", (word,))
+    row = cur.fetchone()
+    conn.close()
 
-    # Query
-    curr.execute("SELECT embedding FROM embeddings WHERE word = ?", (word,))
-    result = curr.fetchall()
-
-    if len(result) == 0:
-        result2 = np.zeros(300).tolist()
-    else:
-        result2 = ast.literal_eval(result[0][0])
-
-    conn3.commit()
-    conn3.close()
-
-    return result2
+    if row is None:
+        return np.zeros(300).tolist()
+    return ast.literal_eval(row[0])
 
 
 def fetch_test_data(review_id):
-    """ Fetches the test data for a specific review id """
+    import os, sqlite3
+    db_path = os.path.join(os.path.dirname(__file__), "test_data.db")
+    if not os.path.exists(db_path):
+        raise FileNotFoundError(f"Database not found: {db_path}")
 
-    # db connection
-    conn4 = sqlite3.connect("test_data.db")
-    curr4 = conn4.cursor()
+    conn = sqlite3.connect(db_path)
+    cur = conn.cursor()
+    cur.execute("SELECT * FROM test_dataset4 WHERE id = ?", (review_id,))
+    row = cur.fetchone()
+    conn.close()
 
-    # query
-    curr4.execute("""SELECT * FROM test_dataset4 WHERE id = ?""", (review_id,))
-    review = curr4.fetchone()
-
-    # decoding
-    rating = review[2]
-    text = review[3]
-
-    conn4.commit()
-    conn4.close()
-
-    return [rating, text]
+    if row is None:
+        raise LookupError(f"No test data for id={review_id} in {db_path}.")
+    return [row[2], row[3]]
 
 
 def update_values(layer_number, new_weights, new_biases):
-    """ replaces the neural values database with new weights and biases from backpropagation """
+    import os, sqlite3
+    db_path = os.path.join(os.path.dirname(__file__), "neuron_weights.db")
+    if not os.path.exists(db_path):
+        raise FileNotFoundError(f"Database not found: {db_path}")
 
-    # Database connection
-    conn1 = sqlite3.connect("neuron_weights.db")
-    neural_cursor = conn1.cursor()
-
-    # Query
-    neural_cursor.execute("""UPDATE weights SET weights = ?, biases = ? WHERE LayerNum = ?""", (str(new_weights), str(new_biases), layer_number))
-
-    # Closing connection
-    conn1.commit()
-    conn1.close()
+    conn = sqlite3.connect(db_path)
+    cur = conn.cursor()
+    cur.execute("""UPDATE weights SET weights = ?, biases = ? WHERE LayerNum = ?""",
+                (str(new_weights), str(new_biases), layer_number))
+    conn.commit()
+    conn.close()
 
 
+# ...existing code...
 def update_kernel(new_kernel, layer_number):
+    import os, sqlite3
+    # open the DB file next to this module to avoid working-dir issues
+    db_path = os.path.join(os.path.dirname(__file__), "convolution_layers.db")
+    if not os.path.exists(db_path):
+        raise FileNotFoundError(f"Database not found: {db_path}")
 
-    # Database connection
-    conn2 = sqlite3.connect("convolution_layers.db")
-    kernel_cursor = conn2.cursor()
+    conn = sqlite3.connect(db_path)
+    cur = conn.cursor()
 
-    # Query
-    kernel_cursor.execute("""UPDATE kernels SET kernel = ? WHERE LayerNum = ?""", (str(new_kernel), layer_number))
+    # verify table exists
+    cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='kernels'")
+    if cur.fetchone() is None:
+        cur.execute("SELECT name FROM sqlite_master WHERE type='table'")
+        tables = [r[0] for r in cur.fetchall()]
+        conn.close()
+        raise RuntimeError(f"Table 'kernels' not found in {db_path}. existing tables: {tables}")
 
-    # Closing connection
-    conn2.commit()
-    conn2.close()
+    # perform update
+    cur.execute("UPDATE kernels SET kernel = ? WHERE LayerNum = ?", (str(new_kernel), layer_number))
+    conn.commit()
+    conn.close()
+# ...existing code...
 
 
 def make_table():

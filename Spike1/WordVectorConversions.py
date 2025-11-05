@@ -106,38 +106,3 @@ def pad_matrix(tensor_input):
 
 input_file_directory = ('C:/Users/samja/Documents/SchoolWork/ComputerScience/Project/SentimentAnalyser/Data'
                         '/WordEmbeddings.jsonl')
-
-'''
-# This is purely for comparison purposes
-formatted_data = format_entry_data(['The tall man walked across the field'])
-
-choice = int(input('Choose file search method\n1. Text file\n2. Jsonl file\n'))
-if choice == 1:
-    input_file_directory = ('C:/Users/samja/Documents/SchoolWork/ComputerScience/Project/SentimentAnalyser/Data'
-                            '/WordEmbeddings.txt')
-    start = time.time()
-    vector_result = return_vector_matrix_txt(formatted_data)
-else:
-    input_file_directory = ('C:/Users/samja/Documents/SchoolWork/ComputerScience/Project/SentimentAnalyser/Data'
-                            '/WordEmbeddings.jsonl')
-    start = time.time()
-    vector_result = return_vector_matrix_jsonl(formatted_data)
-
-padded_result = pad_matrix(vector_result)
-end = time.time()
-print(padded_result)
-print(f'Time elapsed: {end - start}')
-
-input_file_directory = ('C:/Users/samja/Documents/SchoolWork/ComputerScience/Project/SentimentAnalyser/Data'
-                        '/WordEmbeddings.jsonl')
-
-
-
-start = time.time()
-print(formatted_data)
-vector_result = return_vector_matrix_jsonl(formatted_data)
-padded_result = pad_matrix(vector_result)
-print(padded_result)
-end = time.time()
-print(f'Time elapsed = {end - start}')
-'''

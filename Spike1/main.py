@@ -77,8 +77,8 @@ def tensor_to_matrix(inputTensor):
 
 if mode == 1:  # Training new model
     # Batch input quantity setup from mode selection
-    batch = int(input("Enter number of batches: "))  # How many batches will be run
-    repetitions = int(input("Enter number of tests per batch: "))  # How many batches will be run
+    repetitions = int(input("Enter number of reviews per batch: "))  # How many batches will be run
+    batch = int(input("Enter number of iterations of the batches: "))  # How many batches will be run
 else:
     # Run once (one test)
     batch = 1
@@ -172,10 +172,19 @@ for i in range(batch):
             neuralLayer4.calculate_derivatives(neuralLayer4.ReLU_derivative())
             neuralLayer3.calculate_derivatives(neuralLayer3.ReLU_derivative())
             neuralLayer2.calculate_derivatives(neuralLayer2.ReLU_derivative())
-            neural_input_derivatives = neuralLayer1.calculate_derivatives(neuralLayer1.ReLU_derivative())[0]
 
-            # Convolutional layer backpropagation
-            first_derivatives = convLayer2.backpropagate(neural_input_derivatives, True)
+            # get full dinputs from the first neural layer
+            avdinputs = np.asarray(neuralLayer1.calculate_derivatives(neuralLayer1.ReLU_derivative()))
+
+            # reshape neural dinputs to match convLayer2.output shape (batch, out_h, out_w)
+            conv2_output_shape = np.array(convLayer2.output).shape
+            try:
+                neural_input_derivatives = avdinputs.reshape(conv2_output_shape)
+            except Exception as e:
+                raise RuntimeError(f"Cannot reshape neural layer dinputs {avdinputs.shape} to conv layer output shape {conv2_output_shape}: {e}")
+
+            # Convolutional layer backpropagation — pass already-shaped tensors
+            first_derivatives = convLayer2.backpropagate(neural_input_derivatives, False)
             second_derivatives = convLayer1.backpropagate(first_derivatives, False)
 
             totalLoss += outputLayer.averageLoss

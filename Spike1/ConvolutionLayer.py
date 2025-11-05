@@ -16,25 +16,13 @@ class ConvLayer:
         self.filter_derivatives = None
         self.input_derivatives = None
 
-    # Obsolete
-    def fetch_Kernel(self, file):
-        changed = False
-        with open(file, 'r', encoding='utf-8') as f:
-            for line in f:
-                try:
-                    # For each line in the file (jsonl format)
-                    data = json.loads(line, strict=False, object_hook=lambda d: SimpleNamespace(**d))
-                    if data.layerNum == self.layerNum:
-                        # if the collected layer number is ours
-                        self.kernel = data.kernel
-                        changed = True
-                except:
-                    print("Invalid layer number")
-
     def fetchKernel(self):
+        # load kernel from storage and ensure numpy arrays for internal use
         self.kernel = com.fetch_kernel(self.layerNum)
-        self.filter_derivatives = np.zeros_like(self.kernel)
-        self.input_derivatives = np.zeros_like(None)
+        self.kernel = np.array(self.kernel, dtype=float)
+        self.filter_derivatives = np.zeros_like(self.kernel, dtype=float)
+        # input_derivatives will be set after a forward pass when input shape is known
+        self.input_derivatives = None
 
     def initialize_values(self):
         self.fetchKernel()
@@ -150,37 +138,93 @@ class ConvLayer:
         return new_values
 
     def backpropagate(self, dvalues, flattened):
-        stepS = self.stepSize
-        self.stepSize = 1
+        import numpy as np
+        from scipy.signal import convolve2d
 
+        stepS = self.stepSize
+
+        # reshape dvalues if flattened
         if flattened:
             dvalues = np.array(dvalues).reshape(np.array(self.output).shape)
 
-        # Creating a temporary copy so that the kernel isn't lost.
-        kernelTemp = self.kernel
-        self.kernel = dvalues.tolist()[0]
+        dvalues = np.array(dvalues, dtype=float)        # expected shape: (batch, out_h, out_w)
+        kernel = np.array(self.kernel, dtype=float)     # (k_h, k_w)
 
-        # 180 degree rotation and preparation to become a 'batch'
-        rotated_kernel = np.rot90(np.array(kernelTemp), 2).tolist()
+        # ensure filter_derivatives exists
+        if self.filter_derivatives is None:
+            self.filter_derivatives = np.zeros_like(kernel, dtype=float)
+        else:
+            self.filter_derivatives = np.array(self.filter_derivatives, dtype=float)
 
-        # Filter derivs calculation
-        self.filter_derivatives = np.add(self.filter_derivatives, np.array(self.calculate_kernel_derivatives(self.inputs[0], self.kernel, kernelTemp, stepS)))
+        batch_size = len(self.inputs)
+        k_h, k_w = kernel.shape
 
-        # Calculating input derivatives
-        spread_dvalues = self.spread_matrix(self.inputs[0], self.kernel, stepS)
-        self.input_derivatives = np.add(self.input_derivatives, np.array(correlate2d(spread_dvalues.tolist(), rotated_kernel, mode='valid')))
+        filter_grad = np.zeros_like(kernel, dtype=float)
+        per_input_grads = []
 
-        # returning the kernel and step size back to normal
-        self.kernel = kernelTemp
-        self.stepSize = stepS
+        for b in range(batch_size):
+            inp = np.array(self.inputs[b], dtype=float)   # original input for sample b
+            dout = dvalues[b]                             # (out_h, out_w)
+            out_h, out_w = dout.shape
 
-        output = np.array([np.array(self.input_derivatives).tolist()])
+            # accumulate filter gradients
+            for i in range(out_h):
+                for j in range(out_w):
+                    i_in = i * stepS
+                    j_in = j * stepS
+                    patch = inp[i_in:i_in + k_h, j_in:j_in + k_w]
+                    if patch.shape == (k_h, k_w):
+                        filter_grad += dout[i, j] * patch
+                    else:
+                        pad_patch = np.zeros_like(kernel, dtype=float)
+                        h, w = patch.shape
+                        pad_patch[:h, :w] = patch
+                        filter_grad += dout[i, j] * pad_patch
 
-        # Returning derivatives for use in the next backpropagation layer and value editing
-        return output
+            # upsample dout by stride (zeros inserted between positions)
+            up_h = out_h * stepS - (stepS - 1)
+            up_w = out_w * stepS - (stepS - 1)
+            dout_up = np.zeros((up_h, up_w), dtype=float)
+            for i in range(out_h):
+                for j in range(out_w):
+                    dout_up[i * stepS, j * stepS] = dout[i, j]
 
-    def adjust_kernel_values(self, batch_size):
-        """ Calculates new kernel based on derivative values """
-        self.kernel = np.subtract(np.array(self.kernel), np.multiply(0.01, np.divide(self.filter_derivatives, batch_size))).tolist()
+            # gradient wrt input: full convolution of upsampled dout with rotated kernel
+            grad_in_full = convolve2d(dout_up, np.rot90(kernel, 2), mode='full')
 
+            # crop/trim to original input size
+            inp_h, inp_w = inp.shape
+            grad_cropped = grad_in_full[:inp_h, :inp_w]
+            if grad_cropped.shape != (inp_h, inp_w):
+                tmp = np.zeros((inp_h, inp_w), dtype=float)
+                h = min(grad_cropped.shape[0], inp_h)
+                w = min(grad_cropped.shape[1], inp_w)
+                tmp[:h, :w] = grad_cropped[:h, :w]
+                grad_cropped = tmp
+
+            per_input_grads.append(grad_cropped)
+
+        # accumulate filter derivatives and store input derivatives (sum across batch)
+        self.filter_derivatives = self.filter_derivatives + filter_grad
+        summed_input_derivs = np.sum(np.stack(per_input_grads), axis=0)
+        if self.input_derivatives is None:
+            self.input_derivatives = summed_input_derivs
+        else:
+            self.input_derivatives = np.array(self.input_derivatives, dtype=float) + summed_input_derivs
+
+        # return per-sample input gradients as (batch, H, W)
+        return np.stack(per_input_grads)
+    
+
+    def adjust_kernel_values(self, batch_size, learning_rate=0.01):
+        import numpy as np
+        if batch_size <= 0:
+            return
+        kernel_arr = np.array(self.kernel, dtype=float)
+        filt_deriv = np.array(self.filter_derivatives, dtype=float)
+        update = (learning_rate * (filt_deriv / batch_size))
+        kernel_arr = kernel_arr - update
+        self.kernel = kernel_arr.tolist()
         com.update_kernel(self.kernel, self.layerNum)
+        # reset accumulated derivatives after the update
+        self.filter_derivatives = np.zeros_like(kernel_arr, dtype=float)
