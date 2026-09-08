@@ -15,6 +15,7 @@ class ConvLayer:
         self.reflected_input = None
         self.filter_derivatives = None
         self.input_derivatives = None
+        self.pre_activation = None  # Convolution output before the ReLU
 
     def fetchKernel(self):
         # load kernel from storage and ensure numpy arrays for internal use
@@ -98,44 +99,34 @@ class ConvLayer:
         return folded
 
     def convPass(self, BatchInput):
-        """ This functions performs a convolution of a batch of input matrices
-        with a single kernel using a specified step size for the layer"""
-        totalOutput = []
+        """ Cross-correlates every matrix in the batch with the layer kernel, taking
+        every stepSize-th position, then applies ReLU.
+
+        The previous hand rolled loop emitted duplicated rows and columns at the
+        bottom and right edges: its bounds guard could never take the break branch,
+        so once the window ran past the end it clamped to the last valid position and
+        re-computed it for every remaining step. An 8x9 input with a 3x3 kernel and
+        stride 1 came out as 8x9 (the padded size) instead of 6x9, with the last three
+        rows identical. The backward pass then assumed output row i came from input
+        row i*stepSize, which those duplicates violate.
+
+        This is the same valid-correlate-then-stride formulation benchmark.py uses. """
         self.inputs = BatchInput
-        for t in range(len(BatchInput)):  # For each matrix in the batch input
-            matrix = BatchInput[t]
-            padding = len(self.kernel) // 2  # Finds what number the indexes need to be incremented by
-            output = []
-            for r in range(padding, len(matrix) + padding, self.stepSize):
-                # Starting at the padded value, up to the length of the matrix
-                output1 = []
-                currentTotal = 0
-                if r > (len(matrix) - padding - 1) and (r - (len(matrix) - padding - 1) != r):
-                    #  If r is indexed further than the padding allows and this multiplication hasn't already happened
-                    #  Set r to the furthest possible value
-                    r = len(matrix) - padding - 1
-                elif r > (len(matrix) - padding - 1):
-                    break
-                for i in range(padding, len(matrix[0]) + padding, self.stepSize):
-                    currentTotal = 0
-                    # For as many sets of column multiplications are to be completed
-                    if i > (len(matrix[0]) - padding - 1) and (i - (len(matrix[0]) - padding - 1) != i):
-                        #  If i is indexed further than the padding and this multiplication hasn't already happened
-                        i = len(matrix[0]) - padding - 1  # set i to the furthest possible value
-                    elif i > (len(matrix[0]) - padding - 1):
-                        # if i is greater than the furthest possible value stop the algorithm
-                        break
-                    for n in range(len(self.kernel)):  # For each list in the self.kernel
-                        for k in range(len(self.kernel[n])):  # For each item (k) in the nth list of the self.kernel
-                            if 0 <= n+r-padding < len(matrix) and 0 <= k+i-padding < len(matrix[0]):
-                                product = self.kernel[n][k] * matrix[n+r-padding][k+i-padding]
-                                currentTotal += product
-                    # Adding all the outputs to the correct matrices ready for output
-                    output1.append(currentTotal)
-                output.append(output1)
-            totalOutput.append(output)
-            self.output = totalOutput
-        return totalOutput
+
+        batch = np.asarray(BatchInput, dtype=float)
+        kernel = np.asarray(self.kernel, dtype=float)
+
+        outputs = []
+        for t in range(len(batch)):  # For each matrix in the batch input
+            correlated = correlate2d(batch[t], kernel, mode='valid')
+            outputs.append(correlated[::self.stepSize, ::self.stepSize])
+
+        # Without an activation here the two convolution layers compose to a single
+        # linear map and the second one adds nothing. The pre-activation is kept
+        # because the backward pass needs it to know which units were clamped.
+        self.pre_activation = np.stack(outputs)
+        self.output = np.maximum(0, self.pre_activation)
+        return self.output
 
     @staticmethod
     def calculate_kernel_derivatives(inputs, dvalues, original_kernel, step_size):
@@ -176,6 +167,12 @@ class ConvLayer:
             dvalues = np.array(dvalues).reshape(np.array(self.output).shape)
 
         dvalues = np.array(dvalues, dtype=float)        # expected shape: (batch, out_h, out_w)
+
+        # Gradient of the ReLU applied in convPass. Units whose pre-activation was
+        # negative were clamped and pass no gradient.
+        if self.pre_activation is not None:
+            dvalues = dvalues * (np.asarray(self.pre_activation, dtype=float) > 0)
+
         kernel = np.array(self.kernel, dtype=float)     # (k_h, k_w)
 
         # ensure filter_derivatives exists
@@ -217,8 +214,12 @@ class ConvLayer:
                 for j in range(out_w):
                     dout_up[i * stepS, j * stepS] = dout[i, j]
 
-            # gradient wrt input: full convolution of upsampled dout with rotated kernel
-            grad_in_full = convolve2d(dout_up, np.rot90(kernel, 2), mode='full')
+            # Gradient wrt input. The forward pass is a cross-correlation, so this is a
+            # full convolution with the kernel as it stands: convolve2d already flips
+            # its second argument. Rotating the kernel as well flipped it back and
+            # produced gradients with the wrong orientation, including sign errors at
+            # interior positions.
+            grad_in_full = convolve2d(dout_up, kernel, mode='full')
 
             # crop/trim to original input size
             inp_h, inp_w = inp.shape
