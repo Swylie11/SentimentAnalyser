@@ -216,15 +216,18 @@ class ConvLayer:
         return np.stack(per_input_grads)
     
 
-    def adjust_kernel_values(self, batch_size, learning_rate=0.01):
-        import numpy as np
-        if batch_size <= 0:
-            return
+    def adjust_kernel_values(self, learning_rate):
+        """ Applies the accumulated kernel gradients.
+
+        As in NeuralLayer.adjust_values there is no batch divisor: the gradient
+        arriving from the dense stack has already been normalised by batch size. """
         kernel_arr = np.array(self.kernel, dtype=float)
         filt_deriv = np.array(self.filter_derivatives, dtype=float)
-        update = (learning_rate * (filt_deriv / batch_size))
-        kernel_arr = kernel_arr - update
+
+        kernel_arr = kernel_arr - (learning_rate * filt_deriv)
+
         self.kernel = kernel_arr.tolist()
         com.update_kernel(self.kernel, self.layerNum)
+
         # reset accumulated derivatives after the update
         self.filter_derivatives = np.zeros_like(kernel_arr, dtype=float)

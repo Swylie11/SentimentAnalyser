@@ -43,6 +43,8 @@ if mode == 1:
 reps = 0
 correct_outputs = 0
 
+LEARNING_RATE = 0.01
+
 SENTIMENT_LABELS = {1: "Very negative", 2: "Negative", 3: "Neutral",
                     4: "Positive", 5: "Very positive"}
 
@@ -85,12 +87,12 @@ def one_hot_ratings(star_ratings):
 
 if mode == 1:  # Training new model
     # Batch input quantity setup from mode selection
-    repetitions = int(input("Enter number of reviews per batch: "))  # How many batches will be run
-    batch = int(input("Enter number of iterations of the batches: "))  # How many batches will be run
+    reviews_per_batch = int(input("Enter number of reviews per batch: "))
+    num_batches = int(input("Enter number of batches to run: "))
 else:
     # Run once (one test)
-    batch = 1
-    repetitions = 1
+    num_batches = 1
+    reviews_per_batch = 1
     input_sentence = [str(input("Enter data to be tested: "))]
 
 # Start timer
@@ -99,8 +101,8 @@ start = time.time()
 totalLoss = 0
 bigLoss = 0
 
-# For each entered batch. This is the number used to determine when backpropagation happens
-for i in range(batch):
+# One parameter update per batch, so this loop is the number of updates
+for i in range(num_batches):
 
     if mode == 1:
         print(f'Batch: {i+1}')
@@ -123,8 +125,8 @@ for i in range(batch):
     if mode == 1:  # Training a new model, this fetches test data
         reviews = []
         star_ratings = []
-        for r in range(repetitions):
-            review_id = ((i + 1) * repetitions) - (repetitions - (r + 1))
+        for r in range(reviews_per_batch):
+            review_id = ((i + 1) * reviews_per_batch) - (reviews_per_batch - (r + 1))
             rating, text = com.fetch_test_data(review_id)
             reviews.append(text)
             star_ratings.append(int(rating))
@@ -199,21 +201,21 @@ for i in range(batch):
 
     if mode == 1:  # If training new model
         # Updating values
-        outputLayer.adjust_values(batch)
-        neuralLayer5.adjust_values(batch)
-        neuralLayer4.adjust_values(batch)
-        neuralLayer3.adjust_values(batch)
-        neuralLayer2.adjust_values(batch)
-        neuralLayer1.adjust_values(batch)
+        outputLayer.adjust_values(LEARNING_RATE)
+        neuralLayer5.adjust_values(LEARNING_RATE)
+        neuralLayer4.adjust_values(LEARNING_RATE)
+        neuralLayer3.adjust_values(LEARNING_RATE)
+        neuralLayer2.adjust_values(LEARNING_RATE)
+        neuralLayer1.adjust_values(LEARNING_RATE)
 
-        convLayer1.adjust_kernel_values(batch)
-        convLayer2.adjust_kernel_values(batch)
+        convLayer1.adjust_kernel_values(LEARNING_RATE)
+        convLayer2.adjust_kernel_values(LEARNING_RATE)
 
 end = time.time()
 print(f"Total time elapsed: {end-start}")
 
 if mode == 1:
     # totalLoss accumulates one batch mean per batch, so it is averaged over batches.
-    print(f'Average loss: {totalLoss/batch}')
+    print(f'Average loss: {totalLoss/num_batches}')
     accuracy = correct_outputs/reps
     print(f'Average accuracy = {accuracy * 100}%')

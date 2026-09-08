@@ -177,14 +177,24 @@ class NeuralLayer:
 
         return dinputs
 
-    def adjust_values(self, batch_size):
-        """ Adjusts the weights and biases in the network based on current running derivatives """
+    def adjust_values(self, learning_rate):
+        """ Applies the accumulated gradients to the weights and biases.
+
+        No batch divisor here. combined_derivative already divides by the number of
+        reviews in the batch, so avdweights holds the gradient of the mean loss and a
+        second division would scale the learning rate by 1/batch_size. """
         weights_copy = np.array(self.weights).T  # Copy required as weights is not saved transposed
 
         # Adjusting values
-        new_weights = np.subtract(weights_copy, np.multiply(0.01, np.divide(self.avdweights, batch_size)))
-        new_biases = np.subtract(self.biases, np.multiply(0.01, np.divide(self.avdbiases, batch_size)))[0]
+        new_weights = np.subtract(weights_copy, np.multiply(learning_rate, self.avdweights))
+        new_biases = np.subtract(self.biases, np.multiply(learning_rate, self.avdbiases))[0]
+
+        self.weights = new_weights.T
+        self.biases = new_biases
+
+        # Clear the running totals so the next batch starts from zero
+        self.avdweights = np.zeros_like(self.avdweights)
+        self.avdbiases = np.zeros_like(self.avdbiases)
 
         # Updating values
         com.update_values(self.layerNum, new_weights.T.tolist(), new_biases.tolist())
-
