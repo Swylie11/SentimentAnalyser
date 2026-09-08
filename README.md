@@ -38,21 +38,54 @@ The four SQLite databases are not in the repository and must be built.
 
 ### With the real data
 
-You need two source files: the Amazon reviews dump (`Software.jsonl` or similar)
-and a GloVe-style word embeddings file. Convert them first:
+Two source files are needed. Neither is in the repository.
 
-- `TestDataSetup.py` — trims the review dump to the fields and length range used,
-  writing a `.jsonl` of `{"rating": ..., "text": ...}` records.
-- `WordEmbeddingsSetup.py` — `write_as_jsonl` converts the whitespace-separated
-  embeddings file to `{"word": ..., "vector": [...]}` records.
-
-Both scripts still have hardcoded paths at the bottom; point them at your files.
-Then build the databases:
+**Reviews.** The Amazon Reviews 2023 dump from the McAuley Lab at UCSD, which is
+the current version of the data this project was originally built against. The
+Software category is a 473 MB gzip of 4.88 million reviews:
 
 ```bash
-python InitDatabases.py --reviews /path/to/TestData.jsonl \
-                        --embeddings /path/to/WordEmbeddings.jsonl
+curl -L -o Data/Software.jsonl.gz \
+  https://mcauleylab.ucsd.edu/public_datasets/data/amazon_2023/raw/review_categories/Software.jsonl.gz
 ```
+
+**Embeddings.** GloVe 6B, 300 dimensional, to match `EMBEDDING_DIM`:
+
+```bash
+curl -L -o Data/glove.6B.zip https://huggingface.co/stanfordnlp/glove/resolve/main/glove.6B.zip
+unzip -j Data/glove.6B.zip glove.6B.300d.txt -d Data/
+```
+
+Then build the two `.jsonl` files and the databases:
+
+```bash
+python RealDataSetup.py --reviews-gz Data/Software.jsonl.gz \
+                        --glove      Data/glove.6B.300d.txt \
+                        --per-class  1000 \
+                        --out-dir    Data
+python InitDatabases.py --reviews Data/TestData.jsonl --embeddings Data/WordEmbeddings.jsonl
+```
+
+`RealDataSetup.py` replaces the hardcoded-path scripts (`TestDataSetup.py` and
+`WordEmbeddingsSetup.py`) for this route. It differs from them in three ways that
+matter for getting an honest figure:
+
+- **Classes are balanced.** Raw Amazon ratings are not close to uniform: in the
+  Software category, 1.24 million reviews in the length window are 5 star against
+  155 thousand that are 2 star, an eight to one spread. Sampling the file in order
+  gives a corpus where a model can score well by learning the prior instead of
+  reading the review. Each rating is sampled to the same count.
+- **The sample is drawn from the whole file** by reservoir sampling, not taken
+  from the front, so it is not confined to whichever products appear first.
+- **JSON is written with `json.dumps`.** `TestDataSetup.py` built its lines with
+  an f-string, so any review containing a double quote produced an invalid line
+  that `InitDatabases.py` then skipped without saying so. That is 1.9% of reviews,
+  and reviews containing quotes are not a random 1.9%.
+
+The embedding table is restricted to the vocabulary the corpus actually uses.
+Importing all 400,000 GloVe vectors would build a multi-gigabyte table the model
+would never mostly read. Words with no GloVe vector keep the existing behaviour
+and fall back to a zero vector.
 
 ### Without the real data
 
@@ -134,6 +167,13 @@ If this cannot reach near-100% training accuracy, there is still a bug and there
 is no point starting a full training run. On the synthetic corpus it reaches 100%
 by epoch 19, with the loss falling from 1.675 to 0.0011.
 
+The default 40 epoch budget is calibrated on the synthetic corpus, where each
+rating draws from a disjoint word pool. Real reviews are much harder to memorise:
+on the Amazon corpus 40 epochs reaches only 85% and reports a failure, while 150
+epochs reaches 100% by epoch 76. A failure at the default budget is not by itself
+evidence of a broken graph — check whether the loss is still falling before
+believing it.
+
 ### End-to-end run on the synthetic corpus
 
 A full training pass on 3,000 synthetic reviews (1,500 trained on, 1,500 held
@@ -156,21 +196,74 @@ to read sentiment.
 
 ## Accuracy on real data
 
-**Not yet measured.** The earlier version of this README said no meaningful
-accuracy had been achieved, and that was true, but the cause was a broken backward
-pass rather than a shortage of compute: the ReLU "derivative" returned the layer's
-own forward activations, and the gradient was never passed between layers at all,
-so the chain rule was absent from the network entirely. It could not have learned
-regardless of how long it ran.
+**Measured, and the honest answer is that the model barely learns.**
 
-That is fixed and proved fixed by the checks above, but the Amazon review dump and
-the embeddings file are not present in this checkout, so no honest figure for real
-data can be quoted here. Building the databases from the real sources and running
-a training pass is what fills this section in.
+The corpus is 5,000 Amazon Software reviews, 1,000 per star rating, sampled from
+the 2023 dump as described above. 3,000 are trained on and 2,000 are held out.
+3,000 batches of 32, learning rate 0.03, about 12 minutes.
 
-For calibration when you do: exact five-class star prediction is much harder than
-binary positive/negative, and a from-scratch CNN in the 45-60% range is a
-respectable result.
+```
+Validation (2000 held out reviews, never trained on)
+  Accuracy         : 22.40%
+  Within one star  : 58.35%
+  True labels      : 1*: 18.9%  2*: 19.5%  3*: 21.1%  4*: 20.2%  5*: 20.2%
+  Predictions      : 1*:  2.6%  2*:  2.9%  3*:  8.8%  4*: 61.9%  5*: 23.9%
+```
+
+That figure only means something next to the trivial baselines on the same split,
+and this is the part that matters:
+
+| Predictor | Exact | Within one star |
+|---|---|---|
+| Uniform random | 20.00% | — |
+| Always predict 3* | 21.10% | 60.85% |
+| Always predict 4* | 20.25% | 61.55% |
+| **This model** | **22.40%** | **58.35%** |
+
+The network beats the best constant predictor by 2.15 points on exact accuracy,
+and is 3.20 points *worse* than it on accuracy within one star. Its per-class
+recall shows why: 4.2% on 1 star, 2.6% on 2 star, 63.7% on 4 star. It puts 61.9%
+of all its predictions in the 4 star bucket. It has not collapsed onto a single
+class outright, but it is much closer to guessing the middle of the range than to
+reading sentiment.
+
+The gap between training and validation is the other half of the picture:
+
+| Split | Exact | Within one star |
+|---|---|---|
+| Training (3,000 seen reviews) | 51.73% | 70.73% |
+| Validation (2,000 held out) | 22.40% | 58.35% |
+
+51.73% down to 22.40% is not a model that is learning slowly. It is a model that
+is memorising 3,000 reviews and carrying almost none of it across. The gradient
+checks and the overfit test both pass, so the machinery is right; what is wrong is
+the setup around it.
+
+### Why it is this low, in the order worth attacking
+
+1. **3,000 training reviews is far too few** for five-way star prediction. This
+   run was sized to finish in a session, not to produce the best number. This is
+   the first thing to change.
+2. **The convolution stack is one 5x5 kernel followed by one 3x3 kernel.** A
+   200x300 embedding matrix is compressed to 280 features through a single
+   channel at each stage. Text CNNs normally use a hundred or more filters per
+   layer. This is the architectural bottleneck, and no amount of data fixes it.
+3. **There is no regularisation at all** — no dropout, no weight decay, no early
+   stopping. Given the train/validation gap above, that is exactly what the
+   numbers say is missing.
+4. **Most of every input is padding.** The median review here is 29 words, padded
+   to 200, so roughly 85% of the matrix the convolutions see is 0.001 filler.
+5. **Curly apostrophes are not stripped.** `format_entry_data` removes ASCII
+   `string.punctuation` but not U+2019, so `it’s`, `don’t` and `i’m` miss GloVe
+   and become zero vectors. They are the largest group of out-of-vocabulary
+   tokens. Token level coverage is 98.9%, so this is a small effect, but it is a
+   free fix.
+
+For calibration: exact five-class star prediction is much harder than binary
+positive/negative, and a from-scratch CNN in the 45-60% range is a respectable
+result. This model is not there, and the honest summary is that a correct
+backward pass was necessary to have any chance of learning but was not on its own
+sufficient to learn.
 
 ## What was wrong
 

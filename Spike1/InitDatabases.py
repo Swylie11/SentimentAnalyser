@@ -123,6 +123,10 @@ def import_embeddings(path):
             rows.append((record["word"], str(record["vector"])))
 
     with sqlite3.connect(EMBEDDINGS_DB) as conn:
+        # Clear first, as import_reviews does. Without this, an earlier --synthetic
+        # run leaves its random vectors behind for any word the real file does not
+        # also contain, and the model silently reads noise for those words.
+        conn.execute("DELETE FROM embeddings")
         conn.executemany("INSERT OR REPLACE INTO embeddings (word, embedding) VALUES (?, ?)", rows)
 
     print(f"Imported {len(rows)} embeddings from {path}")
