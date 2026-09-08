@@ -166,15 +166,17 @@ for i in range(batch):
 
             # Backpropagation function calls
 
-            # Neural layer backpropagation
-            outputLayer.calculate_derivatives(outputLayer.combined_derivative(ratings))
-            neuralLayer5.calculate_derivatives(neuralLayer5.ReLU_derivative())
-            neuralLayer4.calculate_derivatives(neuralLayer4.ReLU_derivative())
-            neuralLayer3.calculate_derivatives(neuralLayer3.ReLU_derivative())
-            neuralLayer2.calculate_derivatives(neuralLayer2.ReLU_derivative())
+            # Neural layer backpropagation. Each call returns the gradient with respect
+            # to that layer's inputs, which is the gradient of the layer below's output,
+            # so it has to be carried down the stack rather than discarded.
+            grad = outputLayer.calculate_derivatives(outputLayer.combined_derivative(ratings))
+            grad = neuralLayer5.calculate_derivatives(neuralLayer5.relu_backward(grad))
+            grad = neuralLayer4.calculate_derivatives(neuralLayer4.relu_backward(grad))
+            grad = neuralLayer3.calculate_derivatives(neuralLayer3.relu_backward(grad))
+            grad = neuralLayer2.calculate_derivatives(neuralLayer2.relu_backward(grad))
+            grad = neuralLayer1.calculate_derivatives(neuralLayer1.relu_backward(grad))
 
-            # get full dinputs from the first neural layer
-            avdinputs = np.asarray(neuralLayer1.calculate_derivatives(neuralLayer1.ReLU_derivative()))
+            avdinputs = np.asarray(grad)
 
             # reshape neural dinputs to match convLayer2.output shape (batch, out_h, out_w)
             conv2_output_shape = np.array(convLayer2.output).shape

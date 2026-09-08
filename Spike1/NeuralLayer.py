@@ -45,7 +45,7 @@ class NeuralLayer:
         self.weights = values[0]
         self.biases = values[1]
         self.avdweights = np.zeros_like(np.array(self.weights).T)
-        self.avdbiases = np.zeros_like(self.biases)
+        self.avdbiases = np.zeros((1, len(self.biases)))
 
     def initialise_values(self):
         values = com.fetch_layer(self.layerNum)  # Fetching values for neural layer shape
@@ -148,52 +148,43 @@ class NeuralLayer:
         return self.softmax_copy
 
     def ReLU_derivative(self):
+        """ Removed: this returned the layer's forward activations, not a derivative. """
+        raise NotImplementedError(
+            "ReLU_derivative did not compute a derivative: it gated self.output (already "
+            "non-negative, so the mask was a no-op) and ignored the upstream gradient "
+            "entirely. Use relu_backward(dvalues) instead."
+        )
 
-        batch_drelu = []
+    def relu_backward(self, dvalues):
+        """ Gradient of ReLU with respect to its input, given the gradient of its output.
 
-        for i in range(len(self.inputs)):
-
-            drelu = self.output[i]
-
-            drelu[self.output[i] <= 0] = 0
-            batch_drelu.append(drelu)
-
-        return batch_drelu
+        Gates on layer_output, the pre-activation, because that is what decides which
+        units were clamped. Builds a new array so the stored forward pass is untouched. """
+        dvalues = np.asarray(dvalues, dtype=float)
+        mask = np.asarray(self.layer_output, dtype=float) > 0
+        return dvalues * mask
 
     def calculate_derivatives(self, dvalues):
-        """ Computes a matrix of derivatives of the relu function, inputs, weights and biases then
-        updates the weights and biases for a given layer in an external database"""
+        """ Computes the gradients of this layer's inputs, weights and biases from the
+        gradient of its output, and accumulates the weight and bias gradients.
 
-        # Creating data structures
-        weights_copy = np.array(self.weights).T
-        batch_dinputs = []
-        batch_dweights = []
-        batch_dbiases = []
+        Returns the gradient with respect to this layer's inputs, shape (batch, n_in),
+        which is what the layer below needs. The batch axis is kept: averaging it away
+        here would destroy the per-sample gradients. """
 
-        # For each input (computing once per sentence)
-        for i in range(len(self.inputs)):
+        dvalues = np.asarray(dvalues, dtype=float)
+        inputs = np.asarray(self.inputs, dtype=float)
+        weights = np.asarray(self.weights, dtype=float)  # Stored as (n_out, n_in)
 
-            dvalue = dvalues[i]
-            dvalue = np.array(dvalue).reshape(1, -1)
-            inputs2 = self.inputs[i]
-            inputs = np.array(inputs2).reshape(1, -1)
+        dinputs = np.dot(dvalues, weights)                # (batch, n_in)
+        dweights = np.dot(inputs.T, dvalues)              # (n_in, n_out)
+        dbiases = np.sum(dvalues, axis=0, keepdims=True)  # (1, n_out)
 
-            # Calculating derivatives as matrices thus a batch
-            dinputs = np.dot(dvalue, weights_copy.T)
-            dweights = np.dot(inputs.T, dvalue)
-            dbiases = np.sum(dvalue, axis=0, keepdims=True)
+        # Running totals, applied to the parameters by adjust_values
+        self.avdweights = self.avdweights + dweights
+        self.avdbiases = self.avdbiases + dbiases
 
-            # Updating batches of differentials
-            batch_dinputs.append(dinputs)
-            batch_dweights.append(dweights)
-            batch_dbiases.append(dbiases)
-
-        # Calculating averages
-        self.avdweights = np.add(self.avdweights, np.array(sum(batch_dweights)/len(batch_dweights)))
-        self.avdbiases = np.add(self.avdbiases, np.array(sum(batch_dbiases)/len(batch_dbiases)))
-        avdinputs = sum(batch_dinputs)/len(batch_dinputs)
-
-        return avdinputs
+        return dinputs
 
     def adjust_values(self, batch_size):
         """ Adjusts the weights and biases in the network based on current running derivatives """
