@@ -134,6 +134,26 @@ If this cannot reach near-100% training accuracy, there is still a bug and there
 is no point starting a full training run. On the synthetic corpus it reaches 100%
 by epoch 19, with the loss falling from 1.675 to 0.0011.
 
+### End-to-end run on the synthetic corpus
+
+A full training pass on 3,000 synthetic reviews (1,500 trained on, 1,500 held
+out), 600 batches of 32, about 140 seconds:
+
+```
+Validation (1500 held out reviews, never trained on)
+  Accuracy         : 97.07%
+  Within one star  : 98.47%
+  True labels      : 1*: 20.4%  2*: 18.7%  3*: 20.8%  4*: 19.5%  5*: 20.6%
+  Predictions      : 1*: 20.7%  2*: 19.1%  3*: 20.6%  4*: 19.3%  5*: 20.2%
+```
+
+**This is a synthetic dataset and the figure is not a sentiment analysis result.**
+Each rating draws from its own disjoint word pool, so the task is far easier than
+real reviews. What it does demonstrate is that the network trains, generalises to
+data it has not seen, and spreads its predictions across all five classes instead
+of collapsing onto one. It is a test of the machinery, not of the model's ability
+to read sentiment.
+
 ## Accuracy on real data
 
 **Not yet measured.** The earlier version of this README said no meaningful
