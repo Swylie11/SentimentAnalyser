@@ -43,31 +43,59 @@ class ConvLayer:
         return np.random.normal(0, standard_dev, (neurons_in, neurons_out))
 
     def reflectMatrix(self, inputBatch):
-        """ This functions takes input of a matrix and a kernel and extends
-        the input matrix in accordance with the size of the kernel"""
-        output = []
-        for m in range(len(inputBatch)):
-            inputMatrix = inputBatch[m]
-            for i in range(len(inputMatrix)):  # For every row in the input matrix
-                buffer = len(self.kernel)//2  # How many rows to be added
-                newArr = inputMatrix[i][:buffer]  # First half of the matrix
-                for n in range(len(newArr)):
-                    inputMatrix[i].insert(0, newArr[n])  # Adds the items in reverse order to the matrix
-                newArr = inputMatrix[i][(len(inputMatrix[i])-buffer):]  # Second half of the matrix
-                newArr.reverse()
-                for n in range(len(newArr)):
-                    inputMatrix[i].insert(len(inputMatrix[i]), newArr[n])
-            buffer = len(self.kernel)//2
-            newArr = inputMatrix[:buffer]  # First len(self.kernel)-1 rows in the input matrix
-            for i in range(len(newArr)):
-                inputMatrix.insert(0, newArr[i])  # Adding the new matrix to the start of the input matrix
-            newArr = inputMatrix[(len(inputMatrix)-buffer):]
-            newArr.reverse()
-            for i in range(len(newArr)):
-                inputMatrix.insert(len(inputMatrix), newArr[i])  # Adding the new matrix to the end of the input matrix
-            output.append(inputMatrix)  # Adds the reflected input matrix to the final output
-        self.reflected_input = output
-        return output
+        """ Pads every matrix in the batch by half the kernel width on each side,
+        mirroring the border values.
+
+        This builds and returns a new array. The previous version inserted into the
+        caller's lists in place, so calling it on convLayer1.output silently rewrote
+        layer 1's stored forward output with a padded copy after the fact, which in
+        turn hid a shape mismatch in the backward pass. """
+        buffer = len(self.kernel) // 2
+        padded = np.pad(np.asarray(inputBatch, dtype=float),
+                        ((0, 0), (buffer, buffer), (buffer, buffer)),
+                        mode="symmetric")
+        self.reflected_input = padded
+        return padded
+
+    @staticmethod
+    def reflection_source_indices(padded_length, buffer):
+        """ Maps each index of a symmetrically padded axis back to the index it copied. """
+        original_length = padded_length - 2 * buffer
+        sources = np.empty(padded_length, dtype=int)
+        for position in range(padded_length):
+            if position < buffer:
+                sources[position] = buffer - 1 - position
+            elif position < buffer + original_length:
+                sources[position] = position - buffer
+            else:
+                sources[position] = original_length - 1 - (position - buffer - original_length)
+        return sources
+
+    def fold_reflection_gradient(self, gradient):
+        """ Converts a gradient with respect to the padded input into one with respect
+        to the unpadded input.
+
+        The padding duplicates border values, so a padded cell's gradient belongs to
+        whichever original cell it was mirrored from and has to be added back there
+        rather than discarded. """
+        gradient = np.asarray(gradient, dtype=float)
+        buffer = len(self.kernel) // 2
+        if buffer == 0:
+            return gradient
+
+        batch_size, padded_height, padded_width = gradient.shape
+        row_sources = self.reflection_source_indices(padded_height, buffer)
+        column_sources = self.reflection_source_indices(padded_width, buffer)
+
+        folded_rows = np.zeros((batch_size, padded_height - 2 * buffer, padded_width))
+        for position in range(padded_height):
+            folded_rows[:, row_sources[position], :] += gradient[:, position, :]
+
+        folded = np.zeros((batch_size, padded_height - 2 * buffer, padded_width - 2 * buffer))
+        for position in range(padded_width):
+            folded[:, :, column_sources[position]] += folded_rows[:, :, position]
+
+        return folded
 
     def convPass(self, BatchInput):
         """ This functions performs a convolution of a batch of input matrices
@@ -212,8 +240,9 @@ class ConvLayer:
         else:
             self.input_derivatives = np.array(self.input_derivatives, dtype=float) + summed_input_derivs
 
-        # return per-sample input gradients as (batch, H, W)
-        return np.stack(per_input_grads)
+        # Return the gradient with respect to the unpadded input, which is what the
+        # layer below actually produced.
+        return self.fold_reflection_gradient(np.stack(per_input_grads))
     
 
     def adjust_kernel_values(self, learning_rate):
