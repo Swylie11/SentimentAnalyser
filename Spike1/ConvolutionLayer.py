@@ -12,7 +12,6 @@ class ConvLayer:
         self.inputs = None
         self.reflected_input = None
         self.filter_derivatives = None
-        self.input_derivatives = None
         self.pre_activation = None  # Convolution output before the ReLU
 
     def fetchKernel(self):
@@ -20,8 +19,6 @@ class ConvLayer:
         self.kernel = com.fetch_kernel(self.layerNum)
         self.kernel = np.array(self.kernel, dtype=float)
         self.filter_derivatives = np.zeros_like(self.kernel, dtype=float)
-        # input_derivatives will be set after a forward pass when input shape is known
-        self.input_derivatives = None
 
     def initialize_values(self):
         self.fetchKernel()
@@ -204,18 +201,12 @@ class ConvLayer:
 
             per_input_grads.append(grad_cropped)
 
-        # accumulate filter derivatives and store input derivatives (sum across batch)
+        # accumulate filter derivatives
         self.filter_derivatives = self.filter_derivatives + filter_grad
-        summed_input_derivs = np.sum(np.stack(per_input_grads), axis=0)
-        if self.input_derivatives is None:
-            self.input_derivatives = summed_input_derivs
-        else:
-            self.input_derivatives = np.array(self.input_derivatives, dtype=float) + summed_input_derivs
 
         # Return the gradient with respect to the unpadded input, which is what the
         # layer below actually produced.
         return self.fold_reflection_gradient(np.stack(per_input_grads))
-    
 
     def adjust_kernel_values(self, learning_rate):
         """ Applies the accumulated kernel gradients.
