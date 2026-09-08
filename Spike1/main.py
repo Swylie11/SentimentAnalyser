@@ -1,72 +1,41 @@
-import WordVectorConversions as wvc
-import json
-from types import SimpleNamespace
+"""Trains or runs the sentiment analyser.
+
+Architecture: embeddings -> conv(5x5, stride 5) -> ReLU -> conv(3x3, stride 3)
+-> ReLU -> flatten -> five dense ReLU layers -> softmax over five star ratings.
+"""
+
 import time
-from ConvolutionLayer import ConvLayer
-from NeuralLayer import NeuralLayer
-import Comms as com
+
 import numpy as np
 
-
-# Defining the convolutional layers
-mode = int(input("To train a new model, press 1. To test the currently loaded model, press 2.\n"
-                 "To load a model, input valid database files into the current folder titled:\n"
-                 "'convolution_layers', and 'neuron_weights'.\n"
-                 "WARNING: If training a new model, the current neuron weights and kernel files will be overridden.\n"))
-
-convLayer1 = ConvLayer(1, 5)
-convLayer2 = ConvLayer(2, 3)
-
-# Defining the neural layers
-neuralLayer1 = NeuralLayer(1)
-neuralLayer2 = NeuralLayer(2)
-neuralLayer3 = NeuralLayer(3)
-neuralLayer4 = NeuralLayer(4)
-neuralLayer5 = NeuralLayer(5)
-outputLayer = NeuralLayer(6)
-
-
-if mode == 1:
-    # If training a new model: override value matrices with normally distributed values
-    # If a new model is not being trained, the currently loaded values will be used.
-    convLayer1.initialize_values()
-    convLayer2.initialize_values()
-
-    neuralLayer1.initialise_values()
-    neuralLayer2.initialise_values()
-    neuralLayer3.initialise_values()
-    neuralLayer4.initialise_values()
-    neuralLayer5.initialise_values()
-    outputLayer.initialise_values()
-
-
-reps = 0
-correct_outputs = 0
+import Comms as com
+import WordVectorConversions as wvc
+from ConvolutionLayer import ConvLayer
+from NeuralLayer import NeuralLayer
 
 LEARNING_RATE = 0.01
+
+# Reviews held out and never trained on, so the reported accuracy means something.
+VALIDATION_SIZE = 2000
+
+# Seeded so the train/validation split and the batch order are reproducible.
+DATA_SEED = 0
+
+# Reviews per forward pass during evaluation. Each review is a 200x300 embedding
+# matrix, so evaluating thousands at once would not fit in memory.
+EVALUATION_CHUNK = 50
+
+NUM_CLASSES = 5
 
 SENTIMENT_LABELS = {1: "Very negative", 2: "Negative", 3: "Neutral",
                     4: "Positive", 5: "Very positive"}
 
 
-# Obsolete
-def fetch_test_data(test_data, batch_size):
-    """ Fetches batch review data from the test data file """
-    count = 0
-    with open(test_data, 'r', encoding='utf8') as f:
-        output = []
-        rating = []
-        for line in f:  # For every review
-            if count < batch_size:
-                review = json.loads(line, strict=False, object_hook=lambda d: SimpleNamespace(**d))
-                output.append(review.text)  # Adds the review to the batch output
-                rating.append(review.rating)
-                count += 1
-            else:
-                break
-        f.close()
-        total_review = [output, rating]
-        return total_review
+def one_hot_ratings(star_ratings):
+    """ Converts a list of 1-5 star ratings to a (batch, 5) one hot matrix. """
+    encoded = np.zeros((len(star_ratings), NUM_CLASSES))
+    encoded[np.arange(len(star_ratings)), np.asarray(star_ratings, dtype=int) - 1] = 1
+    return encoded
 
 
 def flatten_conv_output(inputTensor):
@@ -78,144 +47,204 @@ def flatten_conv_output(inputTensor):
     return tensor.reshape(tensor.shape[0], -1)
 
 
-def one_hot_ratings(star_ratings):
-    """ Converts a list of 1-5 star ratings to a (batch, 5) one hot matrix. """
-    encoded = np.zeros((len(star_ratings), 5))
-    encoded[np.arange(len(star_ratings)), np.asarray(star_ratings, dtype=int) - 1] = 1
-    return encoded
+def forward_pass(conv_layers, dense_layers, output_layer, texts):
+    """ Runs a batch of review texts through the whole network.
+
+    Returns the softmax output, shape (len(texts), 5). """
+    conv_input = wvc.pad_matrix(wvc.return_vector_matrix_jsonl(wvc.format_entry_data(texts)))
+
+    conv1, conv2 = conv_layers
+    conv_output = conv1.convPass(conv1.reflectMatrix(conv_input))
+    conv_output = conv2.convPass(conv2.reflectMatrix(conv_output))
+
+    activations = flatten_conv_output(conv_output)
+    for layer in dense_layers:
+        activations = layer.batch_layer_output(activations)
+
+    return output_layer.softmax(activations)[1]
 
 
-if mode == 1:  # Training new model
-    # Batch input quantity setup from mode selection
-    reviews_per_batch = int(input("Enter number of reviews per batch: "))
-    num_batches = int(input("Enter number of batches to run: "))
-else:
-    # Run once (one test)
-    num_batches = 1
-    reviews_per_batch = 1
-    input_sentence = [str(input("Enter data to be tested: "))]
+def backward_pass(conv_layers, dense_layers, output_layer, one_hot):
+    """ Propagates the loss gradient back through the whole network.
 
-# Start timer
-start = time.time()
+    Each calculate_derivatives call returns the gradient with respect to that
+    layer's inputs, which is the gradient of the layer below's output, so it has to
+    be carried down the stack rather than discarded. """
+    gradient = output_layer.calculate_derivatives(output_layer.combined_derivative(one_hot))
+    for layer in reversed(dense_layers):
+        gradient = layer.calculate_derivatives(layer.relu_backward(gradient))
 
-totalLoss = 0
-bigLoss = 0
+    conv1, conv2 = conv_layers
 
-# One parameter update per batch, so this loop is the number of updates
-for i in range(num_batches):
+    # Back to the shape the convolution stack emitted.
+    gradient = np.asarray(gradient).reshape(np.asarray(conv2.output, dtype=float).shape)
+
+    gradient = conv2.backpropagate(gradient, False)
+    conv1.backpropagate(gradient, False)
+
+
+def class_distribution(values):
+    """ Formats the count of each star rating, so a model that has collapsed onto a
+    single class is visible rather than hidden behind an accuracy figure. """
+    values = np.asarray(values, dtype=int)
+    total = max(len(values), 1)
+    parts = []
+    for star in range(1, NUM_CLASSES + 1):
+        count = int(np.sum(values == star))
+        parts.append(f"{star}*: {count:>5} ({100 * count / total:4.1f}%)")
+    return "  ".join(parts)
+
+
+def evaluate(conv_layers, dense_layers, output_layer, review_ids):
+    """ Runs the network over a set of reviews without training on them.
+
+    Returns exact accuracy, accuracy within one star, the predictions and the
+    true labels. Adjacent class errors are the normal failure mode for star
+    prediction, so both figures are worth seeing. """
+    predictions = []
+    labels = []
+
+    for start in range(0, len(review_ids), EVALUATION_CHUNK):
+        chunk = review_ids[start:start + EVALUATION_CHUNK]
+        rows = com.fetch_batch(chunk)
+
+        texts = [row[1] for row in rows]
+        labels.extend(int(row[0]) for row in rows)
+
+        softmax_output = forward_pass(conv_layers, dense_layers, output_layer, texts)
+        predictions.extend((np.argmax(softmax_output, axis=1) + 1).tolist())
+
+    predictions = np.asarray(predictions)
+    labels = np.asarray(labels)
+
+    exact = float(np.mean(predictions == labels)) if len(labels) else 0.0
+    within_one = float(np.mean(np.abs(predictions - labels) <= 1)) if len(labels) else 0.0
+
+    return exact, within_one, predictions, labels
+
+
+def training_batches(train_ids, reviews_per_batch, num_batches, seed):
+    """ Yields batches of review ids drawn from a seeded shuffle.
+
+    The previous code walked the ids in order, so if the table has any ordering by
+    rating the model would see one class at a time and could not learn. """
+    rng = np.random.default_rng(seed)
+    order = rng.permutation(train_ids)
+    position = 0
+
+    for _ in range(num_batches):
+        if position + reviews_per_batch > len(order):
+            order = rng.permutation(train_ids)  # Reshuffle once the epoch is exhausted
+            position = 0
+        yield order[position:position + reviews_per_batch].tolist()
+        position += reviews_per_batch
+
+
+def main():
+    mode = int(input("To train a new model, press 1. To test the currently loaded model, press 2.\n"
+                     "To load a model, input valid database files into the current folder titled:\n"
+                     "'convolution_layers', and 'neuron_weights'.\n"
+                     "WARNING: If training a new model, the current neuron weights and kernel files will be overridden.\n"))
+
+    conv_layers = (ConvLayer(1, 5), ConvLayer(2, 3))
+    dense_layers = [NeuralLayer(n) for n in range(1, 6)]
+    output_layer = NeuralLayer(6)
+    all_layers = list(dense_layers) + [output_layer]
 
     if mode == 1:
-        print(f'Batch: {i+1}')
+        # Override the value matrices with freshly drawn values. If a new model is
+        # not being trained, the currently loaded values are used.
+        for layer in conv_layers:
+            layer.initialize_values()
+        for layer in all_layers:
+            layer.initialise_values()
 
-    currentLoss = 0
+        reviews_per_batch = int(input("Enter number of reviews per batch: "))
+        num_batches = int(input("Enter number of batches to run: "))
 
-    # Fetch the currently loaded values in the databases
-    convLayer1.fetchKernel()
-    convLayer2.fetchKernel()
-
-    neuralLayer1.fetch_values()
-    neuralLayer2.fetch_values()
-    neuralLayer3.fetch_values()
-    neuralLayer4.fetch_values()
-    neuralLayer5.fetch_values()
-    outputLayer.fetch_values()
-
-    # Collect a whole batch of reviews before the forward pass, so the batch axis
-    # of every tensor from here down is the review axis.
-    if mode == 1:  # Training a new model, this fetches test data
-        reviews = []
-        star_ratings = []
-        for r in range(reviews_per_batch):
-            review_id = ((i + 1) * reviews_per_batch) - (reviews_per_batch - (r + 1))
-            rating, text = com.fetch_test_data(review_id)
-            reviews.append(text)
-            star_ratings.append(int(rating))
-
-        # Convert star ratings to one hot encoded vectors. This is the correct
-        # distribution matrix, shape (reviews in batch, 5).
-        ratings = one_hot_ratings(star_ratings)
+        train_ids, validation_ids = com.split_ids(
+            com.fetch_all_review_ids(), VALIDATION_SIZE, DATA_SEED)
+        print(f"\n{len(train_ids)} training reviews, {len(validation_ids)} held out for validation.")
     else:
-        reviews = input_sentence
-        star_ratings = None
-        ratings = None  # There is no known correct answer
+        input_sentence = [str(input("Enter data to be tested: "))]
 
-    # Prepare input to conv layer
-    conv_input_data = wvc.pad_matrix(wvc.return_vector_matrix_jsonl(wvc.format_entry_data(reviews)))
+    start = time.time()
 
-    # Conv layer operations
-    convTime = time.time()  # Convolutional layer operations timer starts
-    inputMatrix1 = convLayer1.reflectMatrix(conv_input_data)
-    convLayerOutput = convLayer1.convPass(inputMatrix1)
-    inputMatrix2 = convLayer2.reflectMatrix(convLayerOutput)
-    convLayerOutput2 = convLayer2.convPass(inputMatrix2)
+    if mode == 1:
+        total_loss = 0.0
+        correct_outputs = 0
+        seen = 0
+        train_predictions = []
+        train_labels = []
 
-    # Converting the tensor output to one feature vector per review
-    neuralLayerInput = flatten_conv_output(convLayerOutput2)
+        for batch_index, batch_ids in enumerate(
+                training_batches(train_ids, reviews_per_batch, num_batches, DATA_SEED)):
 
-    # Neural layer operations
-    neuralTime = time.time()  # Neural layer operations timer starts
-    neuralOutput1 = neuralLayer1.batch_layer_output(neuralLayerInput)
-    neuralOutput2 = neuralLayer2.batch_layer_output(neuralOutput1)
-    neuralOutput3 = neuralLayer3.batch_layer_output(neuralOutput2)
-    neuralOutput4 = neuralLayer4.batch_layer_output(neuralOutput3)
-    neuralOutput5 = neuralLayer5.batch_layer_output(neuralOutput4)
-    neuralNetworkOutput = outputLayer.softmax(neuralOutput5)
+            print(f'Batch: {batch_index + 1}')
 
-    # Final statistical operations
-    softmaxOutput = neuralNetworkOutput[1]
-    predictions = np.argmax(softmaxOutput, axis=1) + 1  # Back to 1-5 stars
+            # Fetch the currently loaded values in the databases
+            for layer in conv_layers:
+                layer.fetchKernel()
+            for layer in all_layers:
+                layer.fetch_values()
 
-    if mode == 1:  # If training a new model, backpropagate
+            # One query for the whole batch, rather than one per review.
+            rows = com.fetch_batch(batch_ids)
+            texts = [row[1] for row in rows]
+            star_ratings = [int(row[0]) for row in rows]
+            one_hot = one_hot_ratings(star_ratings)
 
-        # Loss calculation
-        outputLayer.ccel_calculation(ratings)
+            softmax_output = forward_pass(conv_layers, dense_layers, output_layer, texts)
+            predictions = np.argmax(softmax_output, axis=1) + 1
 
-        # Backpropagation function calls
+            output_layer.ccel_calculation(one_hot)
+            backward_pass(conv_layers, dense_layers, output_layer, one_hot)
+            total_loss += output_layer.averageLoss
 
-        # Neural layer backpropagation. Each call returns the gradient with respect
-        # to that layer's inputs, which is the gradient of the layer below's output,
-        # so it has to be carried down the stack rather than discarded.
-        grad = outputLayer.calculate_derivatives(outputLayer.combined_derivative(ratings))
-        grad = neuralLayer5.calculate_derivatives(neuralLayer5.relu_backward(grad))
-        grad = neuralLayer4.calculate_derivatives(neuralLayer4.relu_backward(grad))
-        grad = neuralLayer3.calculate_derivatives(neuralLayer3.relu_backward(grad))
-        grad = neuralLayer2.calculate_derivatives(neuralLayer2.relu_backward(grad))
-        grad = neuralLayer1.calculate_derivatives(neuralLayer1.relu_backward(grad))
+            correct_outputs += int(np.sum(predictions == np.asarray(star_ratings)))
+            seen += len(texts)
+            train_predictions.extend(predictions.tolist())
+            train_labels.extend(star_ratings)
 
-        # Reshape the flat per-review gradients back to the conv output tensor.
-        conv2_output_shape = np.asarray(convLayer2.output, dtype=float).shape
-        neural_input_derivatives = np.asarray(grad).reshape(conv2_output_shape)
+            # Updating values
+            for layer in all_layers:
+                layer.adjust_values(LEARNING_RATE)
+            for layer in conv_layers:
+                layer.adjust_kernel_values(LEARNING_RATE)
 
-        # Convolutional layer backpropagation, passing already-shaped tensors
-        first_derivatives = convLayer2.backpropagate(neural_input_derivatives, False)
-        second_derivatives = convLayer1.backpropagate(first_derivatives, False)
+        elapsed = time.time() - start
+        print(f"\nTotal time elapsed: {elapsed:.2f}s")
 
-        totalLoss += outputLayer.averageLoss
+        print(f"\nTraining (seen during training, not a fair measure)")
+        print(f"  Average loss     : {total_loss / max(num_batches, 1):.4f}")
+        print(f"  Accuracy         : {100 * correct_outputs / max(seen, 1):.2f}%")
+        print(f"  True labels      : {class_distribution(train_labels)}")
+        print(f"  Predictions      : {class_distribution(train_predictions)}")
 
-        correct_outputs += int(np.sum(predictions == np.asarray(star_ratings)))
-        reps += len(reviews)
+        exact, within_one, predictions, labels = evaluate(
+            conv_layers, dense_layers, output_layer, validation_ids)
+
+        print(f"\nValidation ({len(labels)} held out reviews, never trained on)")
+        print(f"  Accuracy         : {100 * exact:.2f}%")
+        print(f"  Within one star  : {100 * within_one:.2f}%")
+        print(f"  True labels      : {class_distribution(labels)}")
+        print(f"  Predictions      : {class_distribution(predictions)}")
+
+        if len(set(predictions.tolist())) == 1:
+            print("\n  Warning: every prediction is the same class. The model has "
+                  "collapsed onto one output rather than learning to separate them.")
     else:
-        reps += len(reviews)
-        for prediction in predictions:
+        for layer in conv_layers:
+            layer.fetchKernel()
+        for layer in all_layers:
+            layer.fetch_values()
+
+        softmax_output = forward_pass(conv_layers, dense_layers, output_layer, input_sentence)
+        for prediction in np.argmax(softmax_output, axis=1) + 1:
             print(SENTIMENT_LABELS[int(prediction)])
 
-    if mode == 1:  # If training new model
-        # Updating values
-        outputLayer.adjust_values(LEARNING_RATE)
-        neuralLayer5.adjust_values(LEARNING_RATE)
-        neuralLayer4.adjust_values(LEARNING_RATE)
-        neuralLayer3.adjust_values(LEARNING_RATE)
-        neuralLayer2.adjust_values(LEARNING_RATE)
-        neuralLayer1.adjust_values(LEARNING_RATE)
+        print(f"Total time elapsed: {time.time() - start:.2f}s")
 
-        convLayer1.adjust_kernel_values(LEARNING_RATE)
-        convLayer2.adjust_kernel_values(LEARNING_RATE)
 
-end = time.time()
-print(f"Total time elapsed: {end-start}")
-
-if mode == 1:
-    # totalLoss accumulates one batch mean per batch, so it is averaged over batches.
-    print(f'Average loss: {totalLoss/num_batches}')
-    accuracy = correct_outputs/reps
-    print(f'Average accuracy = {accuracy * 100}%')
+if __name__ == "__main__":
+    main()
