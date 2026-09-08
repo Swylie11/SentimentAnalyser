@@ -1,8 +1,6 @@
-import json
-from types import SimpleNamespace
 import Comms as com
 import numpy as np
-from scipy.signal import correlate2d
+from scipy.signal import convolve2d, correlate2d
 
 
 class ConvLayer:
@@ -132,38 +130,7 @@ class ConvLayer:
         self.output = np.maximum(0, self.pre_activation)
         return self.output
 
-    @staticmethod
-    def calculate_kernel_derivatives(inputs, dvalues, original_kernel, step_size):
-        """ This method uses a convolutional layers inputs, output derivatives, kernel
-        and step size to calculate the derivatives of the kernel values"""
-        filter_derivatives = np.zeros_like(original_kernel).tolist()  # Making an initial matrix to perform operations
-        for i in range(0, len(inputs), step_size):
-            # Starting at 0, up until the number of rows, incrementing by step_size each time
-            for j in range(0, len(inputs[0]), step_size):
-                # Starting at 0, up until the number of columns, incrementing by step_size each time
-                if i+step_size < len(inputs) and j+step_size < len(inputs[0]):  # Checking indexes haven't gone too high
-                    # Collecting the current patch and putting those values into a matrix
-                    inputs = np.array(inputs)
-                    patch = np.array(inputs[i:i+step_size, j:j+step_size]).tolist()
-                    # Adding to filter derivatives the  current matrix multiplied with its respective dvalue
-                    filter_derivatives = np.add(np.array(filter_derivatives), np.multiply(dvalues[i//step_size][j//step_size], patch))
-        return filter_derivatives
-
-    @staticmethod
-    def spread_matrix(inputs, dvalues, stride):
-        """ Spreads out the values of an input matrix based on a given stride length """
-        new_values = np.zeros_like(inputs)
-        dvalues = np.array(dvalues)
-        for i in range(0, len(dvalues), stride):
-            for j in range(0, len(dvalues[0]), stride):
-                if i+stride-1 <= len(new_values) and j+stride-1 <= len(new_values[0]):
-                    new_values[i+(stride-1), j+(stride-1)] = dvalues[i//stride][j//stride]
-        return new_values
-
     def backpropagate(self, dvalues, flattened):
-        import numpy as np
-        from scipy.signal import convolve2d
-
         stepS = self.stepSize
 
         # reshape dvalues if flattened
@@ -260,8 +227,14 @@ class ConvLayer:
 
         kernel_arr = kernel_arr - (learning_rate * filt_deriv)
 
-        self.kernel = kernel_arr.tolist()
-        com.update_kernel(self.kernel, self.layerNum)
+        self.kernel = kernel_arr
 
         # reset accumulated derivatives after the update
         self.filter_derivatives = np.zeros_like(kernel_arr, dtype=float)
+
+    def save(self):
+        """ Writes the kernel to the database.
+
+        Kept separate from adjust_kernel_values so a run can update in memory every
+        batch and only round-trip through SQLite at checkpoints. """
+        com.update_kernel(np.asarray(self.kernel, dtype=float).tolist(), self.layerNum)

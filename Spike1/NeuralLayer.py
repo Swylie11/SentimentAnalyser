@@ -1,6 +1,4 @@
 import numpy as np
-import json
-from types import SimpleNamespace
 import Comms as com
 
 
@@ -22,21 +20,6 @@ class NeuralLayer:
         self.network_output = None
         self.avdweights = None
         self.avdbiases = None
-
-    # Obsolete
-    def fetch_values2(self, file):
-        changed = False
-        with open(file, 'r', encoding='utf-8') as f:
-            for line in f:
-                # For each line in the file (jsonl format)
-                neuron = json.loads(line, strict=False, object_hook=lambda d: SimpleNamespace(**d))
-                if neuron.layerNum == self.layerNum:
-                    # if the collected layer number is ours
-                    self.weights = neuron.weights
-                    self.biases = neuron.biases
-                    changed = True
-            if not changed:
-                print("Invalid layer number")
 
     def fetch_values(self):
         """ Calls the SQL query in Comms.py and fetches the
@@ -78,15 +61,6 @@ class NeuralLayer:
         standard_dev = np.sqrt(2 / n_in)
         return np.random.normal(0, standard_dev, (n_out, n_in))
 
-    def layer_output1(self, inputs):
-        """ This function outputs the result for a one dimensional input vector """
-        self.inputs = inputs
-        output = []
-        for neuron_n in range(len(inputs)):
-            neuron_output = float(np.dot(inputs, self.weights[neuron_n]) + self.biases[neuron_n])
-            output.append(neuron_output)
-        return output
-
     def batch_layer_output(self, inputs):
         """ This function outputs the result for one batch of one dimensional input vectors """
         self.inputs = inputs
@@ -124,15 +98,6 @@ class NeuralLayer:
                     output_losses.append(ccel)
         self.averageLoss = sum(output_losses)/len(output_losses)
         return output_losses
-
-    # Obsolete
-    @staticmethod
-    def ccel_derivative(correct_distribution, softmax_output):
-        """ Calculates the normalised derivative of the loss function  """
-        batch_size = len(correct_distribution)  # This expects a matrix input as a batch
-        dccel = (-correct_distribution)/softmax_output  # Differential calculation
-        dccel_normalised = dccel / batch_size  # Normalises the output for the total batch input size
-        return dccel_normalised
 
     def combined_derivative(self, correct_distribution):
         """ Calculates the derivative of the categorical cross entropy loss and the softmax output """
@@ -206,5 +171,11 @@ class NeuralLayer:
         self.avdweights = np.zeros_like(self.avdweights)
         self.avdbiases = np.zeros_like(self.avdbiases)
 
-        # Updating values
-        com.update_values(self.layerNum, new_weights.T.tolist(), new_biases.tolist())
+    def save(self):
+        """ Writes the weights and biases to the database.
+
+        Kept separate from adjust_values so a run can update in memory every batch
+        and only round-trip through SQLite at checkpoints. """
+        com.update_values(self.layerNum,
+                          np.asarray(self.weights, dtype=float).tolist(),
+                          np.asarray(self.biases, dtype=float).tolist())

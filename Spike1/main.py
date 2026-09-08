@@ -25,6 +25,10 @@ DATA_SEED = 0
 # matrix, so evaluating thousands at once would not fit in memory.
 EVALUATION_CHUNK = 50
 
+# Weights are held in memory during a run and written to SQLite this often, rather
+# than round-tripping every parameter through JSON on every single batch.
+CHECKPOINT_EVERY = 25
+
 NUM_CLASSES = 5
 
 SENTIMENT_LABELS = {1: "Very negative", 2: "Negative", 3: "Neutral",
@@ -140,6 +144,14 @@ def training_batches(train_ids, reviews_per_batch, num_batches, seed):
         position += reviews_per_batch
 
 
+def save_parameters(conv_layers, all_layers):
+    """ Writes the current parameters to the database. """
+    for layer in conv_layers:
+        layer.save()
+    for layer in all_layers:
+        layer.save()
+
+
 def main():
     mode = int(input("To train a new model, press 1. To test the currently loaded model, press 2.\n"
                      "To load a model, input valid database files into the current folder titled:\n"
@@ -177,16 +189,17 @@ def main():
         train_predictions = []
         train_labels = []
 
+        # Fetch the currently loaded values once. They are then kept in memory for
+        # the whole run and checkpointed to the database at intervals.
+        for layer in conv_layers:
+            layer.fetchKernel()
+        for layer in all_layers:
+            layer.fetch_values()
+
         for batch_index, batch_ids in enumerate(
                 training_batches(train_ids, reviews_per_batch, num_batches, DATA_SEED)):
 
             print(f'Batch: {batch_index + 1}')
-
-            # Fetch the currently loaded values in the databases
-            for layer in conv_layers:
-                layer.fetchKernel()
-            for layer in all_layers:
-                layer.fetch_values()
 
             # One query for the whole batch, rather than one per review.
             rows = com.fetch_batch(batch_ids)
@@ -211,6 +224,11 @@ def main():
                 layer.adjust_values(LEARNING_RATE)
             for layer in conv_layers:
                 layer.adjust_kernel_values(LEARNING_RATE)
+
+            if (batch_index + 1) % CHECKPOINT_EVERY == 0:
+                save_parameters(conv_layers, all_layers)
+
+        save_parameters(conv_layers, all_layers)
 
         elapsed = time.time() - start
         print(f"\nTotal time elapsed: {elapsed:.2f}s")

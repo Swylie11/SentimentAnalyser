@@ -274,41 +274,33 @@ def test_update_is_plain_sgd_on_the_batch_mean():
     adjust_values must not divide again. A second divisor silently scales the
     learning rate by 1/batch_size, which is the bug this guards against.
     """
-    import Comms
+    rng = np.random.default_rng(3)
+    layers = build_network(seed=7)
 
-    written = {}
-    original_update = Comms.update_values
-    Comms.update_values = lambda layer, w, b: written.update(weights=w, biases=b)
+    inputs = rng.normal(0, 1.0, (BATCH_SIZE, LAYER_WIDTHS[0]))
+    one_hot = np.zeros((BATCH_SIZE, LAYER_WIDTHS[-1]))
+    one_hot[np.arange(BATCH_SIZE), rng.integers(0, LAYER_WIDTHS[-1], BATCH_SIZE)] = 1
 
-    try:
-        rng = np.random.default_rng(3)
-        layers = build_network(seed=7)
+    for layer in layers:
+        reset_accumulators(layer)
+    loss_of(layers, inputs, one_hot)
+    backward(layers, one_hot)
 
-        inputs = rng.normal(0, 1.0, (BATCH_SIZE, LAYER_WIDTHS[0]))
-        one_hot = np.zeros((BATCH_SIZE, LAYER_WIDTHS[-1]))
-        one_hot[np.arange(BATCH_SIZE), rng.integers(0, LAYER_WIDTHS[-1], BATCH_SIZE)] = 1
+    layer = layers[0]
+    learning_rate = 0.01
+    before = np.array(layer.weights)
+    gradient = np.array(layer.avdweights).T  # back to (n_out, n_in)
 
-        for layer in layers:
-            reset_accumulators(layer)
-        loss_of(layers, inputs, one_hot)
-        backward(layers, one_hot)
+    # adjust_values updates in memory only; save() is what touches the database.
+    layer.adjust_values(learning_rate)
 
-        layer = layers[0]
-        learning_rate = 0.01
-        before = np.array(layer.weights)
-        gradient = np.array(layer.avdweights).T  # back to (n_out, n_in)
+    expected = before - learning_rate * gradient
+    assert np.allclose(layer.weights, expected), (
+        "adjust_values did not apply exactly learning_rate * gradient; "
+        "a batch divisor has crept back in")
 
-        layer.adjust_values(learning_rate)
-
-        expected = before - learning_rate * gradient
-        assert np.allclose(layer.weights, expected), (
-            "adjust_values did not apply exactly learning_rate * gradient; "
-            "a batch divisor has crept back in")
-
-        assert np.allclose(layer.avdweights, 0), "accumulators not cleared after an update"
-        assert np.allclose(layer.avdbiases, 0), "bias accumulators not cleared after an update"
-    finally:
-        Comms.update_values = original_update
+    assert np.allclose(layer.avdweights, 0), "accumulators not cleared after an update"
+    assert np.allclose(layer.avdbiases, 0), "bias accumulators not cleared after an update"
 
 
 def main():
