@@ -4,6 +4,8 @@ Architecture: embeddings -> conv(5x5, stride 5) -> ReLU -> conv(3x3, stride 3)
 -> ReLU -> flatten -> five dense ReLU layers -> softmax over five star ratings.
 """
 
+import os
+import shutil
 import time
 
 import numpy as np
@@ -13,7 +15,10 @@ import WordVectorConversions as wvc
 from ConvolutionLayer import ConvLayer
 from NeuralLayer import NeuralLayer
 
-LEARNING_RATE = 0.01
+# 0.01 was too low for this depth: the overfit test reached 100% on two random
+# seeds out of three and stalled at 46% on the third. At 0.03 it reaches 100% on
+# every seed tried.
+LEARNING_RATE = 0.03
 
 # Reviews held out and never trained on, so the reported accuracy means something.
 VALIDATION_SIZE = 2000
@@ -144,6 +149,36 @@ def training_batches(train_ids, reviews_per_batch, num_batches, seed):
         position += reviews_per_batch
 
 
+MODEL_DATABASES = ("neuron_weights.db", "convolution_layers.db")
+
+
+def confirm_and_back_up_model():
+    """ Confirms before training overwrites the stored model, and keeps a copy.
+
+    Training reinitialises every weight and kernel, so starting it destroys whatever
+    model was loaded. Rather than warning about that in the README, ask first and
+    write a timestamped backup of the databases that are about to be overwritten. """
+    here = os.path.dirname(os.path.abspath(__file__))
+    existing = [name for name in MODEL_DATABASES if os.path.exists(os.path.join(here, name))]
+
+    if existing:
+        print("\nTraining will overwrite the current weights and kernels in "
+              + ", ".join(existing) + ".")
+        answer = input("A timestamped backup will be written first. Continue? [y/N] ")
+        if answer.strip().lower() not in ("y", "yes"):
+            print("Cancelled. Nothing was changed.")
+            return False
+
+        stamp = time.strftime("%Y%m%d-%H%M%S")
+        for name in existing:
+            source = os.path.join(here, name)
+            backup = os.path.join(here, f"{name[:-3]}.{stamp}.db")
+            shutil.copy2(source, backup)
+            print(f"  backed up {name} -> {os.path.basename(backup)}")
+
+    return True
+
+
 def save_parameters(conv_layers, all_layers):
     """ Writes the current parameters to the database. """
     for layer in conv_layers:
@@ -164,6 +199,9 @@ def main():
     all_layers = list(dense_layers) + [output_layer]
 
     if mode == 1:
+        if not confirm_and_back_up_model():
+            return
+
         # Override the value matrices with freshly drawn values. If a new model is
         # not being trained, the currently loaded values are used.
         for layer in conv_layers:
