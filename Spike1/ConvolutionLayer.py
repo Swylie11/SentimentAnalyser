@@ -28,20 +28,24 @@ class ConvLayer:
     def initialize_values(self):
         self.fetchKernel()
 
-        # Initializing kernel using glorot method
-        self.kernel = self.glorot_normal_kernel(self.kernel).tolist()
+        # Initializing kernel using the He method
+        self.kernel = self.he_normal_kernel(self.kernel).tolist()
 
         # Updating the database with the new kernel
         com.update_kernel(self.kernel, self.layerNum)
 
     @staticmethod
-    def glorot_normal_kernel(kernel):
-        neurons_in = len(kernel)
-        neurons_out = len(kernel[0])
-        standard_dev = np.sqrt(2 / (neurons_in + neurons_out))  # Standard dev calculation
+    def he_normal_kernel(kernel):
+        """ He initialisation for the kernel, matching the ReLU now applied in convPass.
 
-        # Returning normal dist of correct shape, the ouptut size will be 5x5 or 3x3
-        return np.random.normal(0, standard_dev, (neurons_in, neurons_out))
+        The fan in of a convolution unit is every cell of the window it sees, so it is
+        the number of kernel elements rather than either of its two sides. """
+        kernel_height = len(kernel)
+        kernel_width = len(kernel[0])
+        standard_dev = np.sqrt(2 / (kernel_height * kernel_width))
+
+        # Returning normal dist of correct shape, the output size will be 5x5 or 3x3
+        return np.random.normal(0, standard_dev, (kernel_height, kernel_width))
 
     def reflectMatrix(self, inputBatch):
         """ Pads every matrix in the batch by half the kernel width on each side,

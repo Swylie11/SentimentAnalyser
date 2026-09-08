@@ -51,22 +51,32 @@ class NeuralLayer:
         values = com.fetch_layer(self.layerNum)  # Fetching values for neural layer shape
         self.weights = values[0]
         self.biases = values[1]
-        neurons_in = len(self.weights)  # Neurons in prev layer
-        neurons_out = len(self.weights[0])  # Neurons in current layer
+
+        # Weights are stored as (n_out, n_in), so the fan in is the second axis.
+        # The previous code read these the other way round; the shape came out right
+        # because Glorot is symmetric in the two, but He is not.
+        neurons_out = len(self.weights)  # Neurons in this layer
+        neurons_in = len(self.weights[0])  # Neurons in the previous layer
 
         # Weight initialisation
-        self.weights = self.glorot_normal(neurons_in, neurons_out)
+        self.weights = self.he_normal(neurons_in, neurons_out)
 
-        # Bias initialisation
+        # Bias initialisation. A small positive bias suits ReLU: it starts every unit
+        # on the active side of the clamp.
         self.biases = np.full_like(self.biases, 0.01)
 
         # Database update
         com.update_values(self.layerNum, self.weights.tolist(), self.biases.tolist())
 
     @staticmethod
-    def glorot_normal(n_in, n_out):
-        standard_dev = np.sqrt(2 / (n_in + n_out))
-        return np.random.normal(0, standard_dev, (n_in, n_out))
+    def he_normal(n_in, n_out):
+        """ He initialisation, which is the right variance for a ReLU network.
+
+        Glorot assumes an activation that is symmetric about zero, like tanh. ReLU
+        discards the negative half, so Glorot under-scales the variance and, across
+        five hidden layers, drives the activations toward zero and the units dead. """
+        standard_dev = np.sqrt(2 / n_in)
+        return np.random.normal(0, standard_dev, (n_out, n_in))
 
     def layer_output1(self, inputs):
         """ This function outputs the result for a one dimensional input vector """
