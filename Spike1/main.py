@@ -43,6 +43,9 @@ if mode == 1:
 reps = 0
 correct_outputs = 0
 
+SENTIMENT_LABELS = {1: "Very negative", 2: "Negative", 3: "Neutral",
+                    4: "Positive", 5: "Very positive"}
+
 
 # Obsolete
 def fetch_test_data(test_data, batch_size):
@@ -64,15 +67,20 @@ def fetch_test_data(test_data, batch_size):
         return total_review
 
 
-def tensor_to_matrix(inputTensor):
-    outputMatrix = []
-    for i in range(len(inputTensor)):
-        newRow = []
-        for n in range(len(inputTensor[0])):
-            for k in range(len(inputTensor[0][0])):
-                newRow.append(inputTensor[i][n][k])
-        outputMatrix.append(newRow)
-    return outputMatrix
+def flatten_conv_output(inputTensor):
+    """ Flattens a (batch, height, width) convolution output to (batch, height*width).
+
+    One review becomes one feature vector. The batch axis stays as the review axis,
+    so the dense stack, the loss and the labels all agree on what a row means. """
+    tensor = np.asarray(inputTensor, dtype=float)
+    return tensor.reshape(tensor.shape[0], -1)
+
+
+def one_hot_ratings(star_ratings):
+    """ Converts a list of 1-5 star ratings to a (batch, 5) one hot matrix. """
+    encoded = np.zeros((len(star_ratings), 5))
+    encoded[np.arange(len(star_ratings)), np.asarray(star_ratings, dtype=int) - 1] = 1
+    return encoded
 
 
 if mode == 1:  # Training new model
@@ -110,109 +118,84 @@ for i in range(batch):
     neuralLayer5.fetch_values()
     outputLayer.fetch_values()
 
-    for r in range(repetitions):
+    # Collect a whole batch of reviews before the forward pass, so the batch axis
+    # of every tensor from here down is the review axis.
+    if mode == 1:  # Training a new model, this fetches test data
+        reviews = []
+        star_ratings = []
+        for r in range(repetitions):
+            review_id = ((i + 1) * repetitions) - (repetitions - (r + 1))
+            rating, text = com.fetch_test_data(review_id)
+            reviews.append(text)
+            star_ratings.append(int(rating))
 
-        if mode == 1:  # Training a new model, this fetches test data
-            batch_reviews1 = []
-            entry_data_total = com.fetch_test_data(((i+1)*repetitions)-(repetitions-(r+1)))
-            batch_reviews1.append(entry_data_total)
-            batch_reviews = np.array(batch_reviews1).T
-            ratings = batch_reviews[0]
-            reviews = batch_reviews[1]
-            correct_answer = int(ratings[0])
+        # Convert star ratings to one hot encoded vectors. This is the correct
+        # distribution matrix, shape (reviews in batch, 5).
+        ratings = one_hot_ratings(star_ratings)
+    else:
+        reviews = input_sentence
+        star_ratings = None
+        ratings = None  # There is no known correct answer
 
-            entry_data_ratings = []
-            pre_vector = [0, 0, 0, 0, 0]
-            pre_vector[int(ratings[0])-1] = 1
+    # Prepare input to conv layer
+    conv_input_data = wvc.pad_matrix(wvc.return_vector_matrix_jsonl(wvc.format_entry_data(reviews)))
 
-            # Convert star ratings to one hot encoded vectors. This is the correct distribution matrix.
-            entry_data_ratings.append(pre_vector)
-            ratings = entry_data_ratings  # More conventional and easier to understand naming
-        else:
-            reviews = input_sentence
-            ratings = None
-            correct_answer = None  # There is no known correct answer
+    # Conv layer operations
+    convTime = time.time()  # Convolutional layer operations timer starts
+    inputMatrix1 = convLayer1.reflectMatrix(conv_input_data)
+    convLayerOutput = convLayer1.convPass(inputMatrix1)
+    inputMatrix2 = convLayer2.reflectMatrix(convLayerOutput)
+    convLayerOutput2 = convLayer2.convPass(inputMatrix2)
 
-        # Prepare input to conv layer
-        conv_input_data = wvc.pad_matrix(wvc.return_vector_matrix_jsonl(wvc.format_entry_data(reviews)))
+    # Converting the tensor output to one feature vector per review
+    neuralLayerInput = flatten_conv_output(convLayerOutput2)
 
-        # Conv layer operations
-        convTime = time.time()  # Convolutional layer operations timer starts
-        inputMatrix1 = convLayer1.reflectMatrix(conv_input_data)
-        convLayerOutput = convLayer1.convPass(inputMatrix1)
-        inputMatrix2 = convLayer2.reflectMatrix(convLayerOutput)
-        convLayerOutput2 = convLayer2.convPass(inputMatrix2)
+    # Neural layer operations
+    neuralTime = time.time()  # Neural layer operations timer starts
+    neuralOutput1 = neuralLayer1.batch_layer_output(neuralLayerInput)
+    neuralOutput2 = neuralLayer2.batch_layer_output(neuralOutput1)
+    neuralOutput3 = neuralLayer3.batch_layer_output(neuralOutput2)
+    neuralOutput4 = neuralLayer4.batch_layer_output(neuralOutput3)
+    neuralOutput5 = neuralLayer5.batch_layer_output(neuralOutput4)
+    neuralNetworkOutput = outputLayer.softmax(neuralOutput5)
 
-        # Converting tensor output to matrix output
-        neuralLayerInput = tensor_to_matrix(convLayerOutput2)
+    # Final statistical operations
+    softmaxOutput = neuralNetworkOutput[1]
+    predictions = np.argmax(softmaxOutput, axis=1) + 1  # Back to 1-5 stars
 
-        # Neural layer operations
-        neuralTime = time.time()  # Neural layer operations timer starts
-        neuralOutput1 = neuralLayer1.batch_layer_output(neuralLayerInput)
-        neuralOutput2 = neuralLayer2.batch_layer_output(neuralOutput1)
-        neuralOutput3 = neuralLayer3.batch_layer_output(neuralOutput2)
-        neuralOutput4 = neuralLayer4.batch_layer_output(neuralOutput3)
-        neuralOutput5 = neuralLayer5.batch_layer_output(neuralOutput4)
-        neuralNetworkOutput = outputLayer.softmax(neuralOutput5)
-        neuralOutputMetrics = neuralNetworkOutput[0].tolist()
+    if mode == 1:  # If training a new model, backpropagate
 
-        # Final statistical operations
-        softmaxOutput = neuralNetworkOutput[1]
+        # Loss calculation
+        outputLayer.ccel_calculation(ratings)
 
-        if mode == 1:  # If training a new model, backpropagate
+        # Backpropagation function calls
 
-            # Loss calculation
-            outputLayer.ccel_calculation(ratings)
+        # Neural layer backpropagation. Each call returns the gradient with respect
+        # to that layer's inputs, which is the gradient of the layer below's output,
+        # so it has to be carried down the stack rather than discarded.
+        grad = outputLayer.calculate_derivatives(outputLayer.combined_derivative(ratings))
+        grad = neuralLayer5.calculate_derivatives(neuralLayer5.relu_backward(grad))
+        grad = neuralLayer4.calculate_derivatives(neuralLayer4.relu_backward(grad))
+        grad = neuralLayer3.calculate_derivatives(neuralLayer3.relu_backward(grad))
+        grad = neuralLayer2.calculate_derivatives(neuralLayer2.relu_backward(grad))
+        grad = neuralLayer1.calculate_derivatives(neuralLayer1.relu_backward(grad))
 
-            # Backpropagation function calls
+        # Reshape the flat per-review gradients back to the conv output tensor.
+        conv2_output_shape = np.asarray(convLayer2.output, dtype=float).shape
+        neural_input_derivatives = np.asarray(grad).reshape(conv2_output_shape)
 
-            # Neural layer backpropagation. Each call returns the gradient with respect
-            # to that layer's inputs, which is the gradient of the layer below's output,
-            # so it has to be carried down the stack rather than discarded.
-            grad = outputLayer.calculate_derivatives(outputLayer.combined_derivative(ratings))
-            grad = neuralLayer5.calculate_derivatives(neuralLayer5.relu_backward(grad))
-            grad = neuralLayer4.calculate_derivatives(neuralLayer4.relu_backward(grad))
-            grad = neuralLayer3.calculate_derivatives(neuralLayer3.relu_backward(grad))
-            grad = neuralLayer2.calculate_derivatives(neuralLayer2.relu_backward(grad))
-            grad = neuralLayer1.calculate_derivatives(neuralLayer1.relu_backward(grad))
+        # Convolutional layer backpropagation, passing already-shaped tensors
+        first_derivatives = convLayer2.backpropagate(neural_input_derivatives, False)
+        second_derivatives = convLayer1.backpropagate(first_derivatives, False)
 
-            avdinputs = np.asarray(grad)
+        totalLoss += outputLayer.averageLoss
 
-            # reshape neural dinputs to match convLayer2.output shape (batch, out_h, out_w)
-            conv2_output_shape = np.array(convLayer2.output).shape
-            try:
-                neural_input_derivatives = avdinputs.reshape(conv2_output_shape)
-            except Exception as e:
-                raise RuntimeError(f"Cannot reshape neural layer dinputs {avdinputs.shape} to conv layer output shape {conv2_output_shape}: {e}")
-
-            # Convolutional layer backpropagation — pass already-shaped tensors
-            first_derivatives = convLayer2.backpropagate(neural_input_derivatives, False)
-            second_derivatives = convLayer1.backpropagate(first_derivatives, False)
-
-            totalLoss += outputLayer.averageLoss
-
-        # Output metrics
-        '''
-        print(f'length of conv input. Items: {len(inputMatrix1)} Rows: {len(inputMatrix1[0])} Columns: {len(inputMatrix1[0][0])}')
-        print(f'length of neural input. Items: {len(convLayerOutput2)} Rows: {len(convLayerOutput2[0])} Columns: {len(convLayerOutput2[0][0])}')
-        print(f'length of neural output. Items: {len(neuralOutputMetrics)} Rows: {len(neuralOutputMetrics[0])} Columns: 1')
-        '''
-        choice = max(softmaxOutput[0])
-        result = softmaxOutput[0].tolist().index(choice)+1
-        reps += 1
-        if mode == 1 and correct_answer == result:
-            correct_outputs += 1
-        else:
-            if result == 1:
-                print("Very negative")
-            elif result == 2:
-                print("Negative")
-            elif result == 3:
-                print("Neutral")
-            elif result == 4:
-                print("Positive")
-            elif result == 5:
-                print("Very positive")
+        correct_outputs += int(np.sum(predictions == np.asarray(star_ratings)))
+        reps += len(reviews)
+    else:
+        reps += len(reviews)
+        for prediction in predictions:
+            print(SENTIMENT_LABELS[int(prediction)])
 
     if mode == 1:  # If training new model
         # Updating values
@@ -230,6 +213,7 @@ end = time.time()
 print(f"Total time elapsed: {end-start}")
 
 if mode == 1:
-    print(f'Average loss: {totalLoss/(repetitions*batch)}')
-    accuracy = correct_outputs/(repetitions*batch)
+    # totalLoss accumulates one batch mean per batch, so it is averaged over batches.
+    print(f'Average loss: {totalLoss/batch}')
+    accuracy = correct_outputs/reps
     print(f'Average accuracy = {accuracy * 100}%')
