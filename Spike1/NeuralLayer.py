@@ -15,7 +15,6 @@ class NeuralLayer:
         self.layer_output = None
         self.weights = None
         self.biases = None
-        self.drelu_di = None
         self.averageLoss = None
         self.network_output = None
         self.avdweights = None
@@ -27,8 +26,10 @@ class NeuralLayer:
         values = com.fetch_layer(self.layerNum)
         self.weights = values[0]
         self.biases = values[1]
-        self.avdweights = np.zeros_like(np.array(self.weights).T)
-        self.avdbiases = np.zeros((1, len(self.biases)))
+        # Explicitly float: zeros_like would inherit an integer dtype from a
+        # database holding whole-number weights and truncate every gradient.
+        self.avdweights = np.zeros(np.array(self.weights).T.shape, dtype=float)
+        self.avdbiases = np.zeros((1, len(self.biases)), dtype=float)
 
     def initialise_values(self):
         values = com.fetch_layer(self.layerNum)  # Fetching values for neural layer shape
