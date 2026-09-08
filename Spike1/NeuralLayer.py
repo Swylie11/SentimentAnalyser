@@ -85,30 +85,20 @@ class NeuralLayer:
         return self.output
 
     def softmax(self, inputs):
-        """ Softmax calculation for batch input data as a 3-dimensional matrix """
+        """ Softmax over the class axis for a batch of input vectors """
 
         # Computing the layer output
         self.inputs = inputs
         self.layer_output = np.dot(inputs, np.array(self.weights).T) + self.biases
         self.network_output = self.layer_output
 
-        # Softmax calculation
-        input_matrix = np.exp(self.layer_output)  # Finding the exponential of each input value
+        # Subtracting the row maximum keeps the exponentials in range. Without it
+        # np.exp overflows to inf on large logits and every output becomes nan.
+        shifted = self.layer_output - np.max(self.layer_output, axis=1, keepdims=True)
+        exps = np.exp(shifted)
 
-        self.softmax_output = input_matrix / (sum(input_matrix[0]))
-
-        '''
-        for i in range(len(input_matrix)):  # For each 2-dimensional list in the input vector
-            temp = []
-            total = 0
-            for n in range(len(input_matrix[i])):  # For each item in the selected list
-                total += input_matrix[i, n]  # Collect the sum of all values for the softmax calculation
-
-            for n in range(len(input_matrix[i])):
-                temp.append(float(input_matrix[i, n] / total))  # Build a new list of normalised probabilities
-            output2.append(temp)
-        self.softmax_output = output2  # Assigning the result to a variable for use in backpropagation
-        '''
+        # Each row is normalised by its own sum, so every row is a distribution.
+        self.softmax_output = exps / np.sum(exps, axis=1, keepdims=True)
 
         return [self.network_output, self.softmax_output]
 
@@ -119,7 +109,8 @@ class NeuralLayer:
             for n in range(len(correct_distribution_matrix[i])):  # For each item in the selected list from the matrix
                 if correct_distribution_matrix[i][n] == 1:
                     # Searching for the index of the ground truth in the ideal output distribution
-                    ccel = float(-(np.log(self.softmax_output[i][n])))  # loss calculation
+                    p = np.clip(self.softmax_output[i][n], 1e-12, 1.0)
+                    ccel = float(-np.log(p))  # loss calculation
                     output_losses.append(ccel)
         self.averageLoss = sum(output_losses)/len(output_losses)
         return output_losses
