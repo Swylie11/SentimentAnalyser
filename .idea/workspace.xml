@@ -1,0 +1,466 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="AutoImportSettings">
+    <option name="autoReloadType" value="SELECTIVE" />
+  </component>
+  <component name="ChangeListManager">
+    <list default="true" id="49a24391-399d-4f57-abe8-ad80cbcc0ce2" name="Changes" comment="Finished project. Final commit for now.">
+      <change beforePath="$PROJECT_DIR$/Spike1/WordVectorConversions.py" beforeDir="false" afterPath="$PROJECT_DIR$/Spike1/WordVectorConversions.py" afterDir="false" />
+    </list>
+    <option name="SHOW_DIALOG" value="false" />
+    <option name="HIGHLIGHT_CONFLICTS" value="true" />
+    <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
+    <option name="LAST_RESOLUTION" value="IGNORE" />
+  </component>
+  <component name="ExportToHTMLSettings">
+    <option name="OUTPUT_DIRECTORY" value="$PROJECT_DIR$/../SentimentAnalyser\exportToHTML" />
+  </component>
+  <component name="FileTemplateManagerImpl">
+    <option name="RECENT_TEMPLATES">
+      <list>
+        <option value="Python Script" />
+      </list>
+    </option>
+  </component>
+  <component name="Git.Settings">
+    <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
+  </component>
+  <component name="MarkdownSettingsMigration">
+    <option name="stateVersion" value="1" />
+  </component>
+  <component name="ProjectColorInfo">{
+  &quot;associatedIndex&quot;: 8
+}</component>
+  <component name="ProjectId" id="2j0KJn8LFzINtmB1m8jQqhg6sBY" />
+  <component name="ProjectLevelVcsManager" settingsEditedManually="true" />
+  <component name="ProjectViewState">
+    <option name="autoscrollToSource" value="true" />
+    <option name="hideEmptyMiddlePackages" value="true" />
+    <option name="showLibraryContents" value="true" />
+  </component>
+  <component name="PropertiesComponent">{
+  &quot;keyToString&quot;: {
+    &quot;ASKED_ADD_EXTERNAL_FILES&quot;: &quot;true&quot;,
+    &quot;ASKED_SHARE_PROJECT_CONFIGURATION_FILES&quot;: &quot;true&quot;,
+    &quot;Python.Comms.executor&quot;: &quot;Run&quot;,
+    &quot;Python.ConvolutionLayer.executor&quot;: &quot;Run&quot;,
+    &quot;Python.NeuralLayer.executor&quot;: &quot;Run&quot;,
+    &quot;Python.Test2.executor&quot;: &quot;Run&quot;,
+    &quot;Python.TestDataSetup.executor&quot;: &quot;Run&quot;,
+    &quot;Python.WordEmbeddings.executor&quot;: &quot;Run&quot;,
+    &quot;Python.WordEmbeddingsSetup.executor&quot;: &quot;Run&quot;,
+    &quot;Python.WordVectorConversions.executor&quot;: &quot;Run&quot;,
+    &quot;Python.main.executor&quot;: &quot;Run&quot;,
+    &quot;Python.main_spike.executor&quot;: &quot;Run&quot;,
+    &quot;Python.setup.executor&quot;: &quot;Run&quot;,
+    &quot;Python.sortWords.executor&quot;: &quot;Run&quot;,
+    &quot;Python.spike1_layer.executor&quot;: &quot;Run&quot;,
+    &quot;Python.test.executor&quot;: &quot;Run&quot;,
+    &quot;RunOnceActivity.OpenProjectViewOnStart&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
+    &quot;git-widget-placeholder&quot;: &quot;master&quot;,
+    &quot;ignore.virus.scanning.warn.message&quot;: &quot;true&quot;,
+    &quot;kotlin-language-version-configured&quot;: &quot;true&quot;,
+    &quot;last_opened_file_path&quot;: &quot;C:/Users/samja/Documents/SchoolWork/ComputerScience/Project/SentimentAnalyser&quot;,
+    &quot;node.js.detected.package.eslint&quot;: &quot;true&quot;,
+    &quot;node.js.detected.package.tslint&quot;: &quot;true&quot;,
+    &quot;node.js.selected.package.eslint&quot;: &quot;(autodetect)&quot;,
+    &quot;node.js.selected.package.tslint&quot;: &quot;(autodetect)&quot;,
+    &quot;nodejs_package_manager_path&quot;: &quot;npm&quot;,
+    &quot;settings.editor.selected.configurable&quot;: &quot;reference.settingsdialog.IDE.editor.colors.General&quot;,
+    &quot;vue.rearranger.settings.migration&quot;: &quot;true&quot;
+  },
+  &quot;keyToStringList&quot;: {
+    &quot;DatabaseDriversLRU&quot;: [
+      &quot;sqlite&quot;
+    ]
+  }
+}</component>
+  <component name="RecentsManager">
+    <key name="MoveFile.RECENT_KEYS">
+      <recent name="C:\Users\samja\Documents\SchoolWork\ComputerScience\Project\SentimentAnalyser\Data" />
+      <recent name="C:\Users\samja\Documents\SchoolWork\ComputerScience\Project\SentimentAnalyser\Spike1" />
+    </key>
+  </component>
+  <component name="SpellCheckerSettings" RuntimeDictionaries="0" Folders="0" CustomDictionaries="0" DefaultDictionary="application-level" UseSingleDictionary="true" transferred="true" />
+  <component name="TaskManager">
+    <task active="true" id="Default" summary="Default task">
+      <changelist id="49a24391-399d-4f57-abe8-ad80cbcc0ce2" name="Changes" comment="" />
+      <created>1720518545968</created>
+      <option name="number" value="Default" />
+      <option name="presentableId" value="Default" />
+      <updated>1720518545968</updated>
+      <workItem from="1720518547079" duration="9357000" />
+      <workItem from="1720528385041" duration="298000" />
+      <workItem from="1720528808495" duration="2190000" />
+      <workItem from="1720531413243" duration="72000" />
+      <workItem from="1720531532979" duration="97000" />
+      <workItem from="1720605855000" duration="3266000" />
+      <workItem from="1720618399438" duration="9230000" />
+      <workItem from="1720634207451" duration="2054000" />
+      <workItem from="1720688237866" duration="7314000" />
+      <workItem from="1720705726046" duration="3378000" />
+      <workItem from="1720709774451" duration="8175000" />
+      <workItem from="1722866533821" duration="4627000" />
+      <workItem from="1722940527558" duration="2443000" />
+      <workItem from="1723726261279" duration="910000" />
+      <workItem from="1723816759172" duration="1217000" />
+      <workItem from="1723907786311" duration="2529000" />
+      <workItem from="1725468364639" duration="50000" />
+      <workItem from="1725695655642" duration="461000" />
+      <workItem from="1725878422607" duration="904000" />
+      <workItem from="1725881650451" duration="1721000" />
+      <workItem from="1725903131174" duration="5132000" />
+      <workItem from="1725973926532" duration="874000" />
+      <workItem from="1725975271640" duration="1172000" />
+      <workItem from="1726073795906" duration="8224000" />
+      <workItem from="1726085590389" duration="4916000" />
+      <workItem from="1726128361810" duration="1035000" />
+      <workItem from="1726131349682" duration="709000" />
+      <workItem from="1726167177796" duration="860000" />
+      <workItem from="1726488276779" duration="577000" />
+      <workItem from="1727092848867" duration="5000" />
+      <workItem from="1727113926624" duration="2127000" />
+      <workItem from="1727286945448" duration="1511000" />
+      <workItem from="1727452393361" duration="2709000" />
+      <workItem from="1728298947029" duration="22000" />
+      <workItem from="1729601248271" duration="3476000" />
+      <workItem from="1730122407673" duration="2250000" />
+      <workItem from="1730137488742" duration="161000" />
+      <workItem from="1730207516758" duration="5589000" />
+      <workItem from="1730814642425" duration="531000" />
+      <workItem from="1730816915898" duration="2264000" />
+      <workItem from="1730971805771" duration="2674000" />
+      <workItem from="1730975718754" duration="974000" />
+      <workItem from="1731074477216" duration="2513000" />
+      <workItem from="1731080664507" duration="6541000" />
+      <workItem from="1731252916011" duration="1797000" />
+      <workItem from="1731325827568" duration="4241000" />
+      <workItem from="1731349696616" duration="124000" />
+      <workItem from="1731422256510" duration="1991000" />
+      <workItem from="1731429409458" duration="3640000" />
+      <workItem from="1731522884453" duration="4792000" />
+      <workItem from="1731575383365" duration="1325000" />
+      <workItem from="1731577938356" duration="2379000" />
+      <workItem from="1731604172042" duration="4234000" />
+      <workItem from="1731688172075" duration="1836000" />
+      <workItem from="1731931945385" duration="789000" />
+      <workItem from="1732182654245" duration="1041000" />
+      <workItem from="1732535249173" duration="1829000" />
+      <workItem from="1733072454675" duration="1216000" />
+      <workItem from="1733235877949" duration="2163000" />
+      <workItem from="1733501878894" duration="3365000" />
+      <workItem from="1733744459215" duration="4470000" />
+      <workItem from="1733838528920" duration="4870000" />
+      <workItem from="1733994504076" duration="4880000" />
+      <workItem from="1734350111610" duration="674000" />
+      <workItem from="1734602243210" duration="1561000" />
+      <workItem from="1736091579767" duration="3015000" />
+      <workItem from="1736163710708" duration="1304000" />
+      <workItem from="1736416488929" duration="1477000" />
+      <workItem from="1736768515445" duration="16000" />
+      <workItem from="1736791661526" duration="71000" />
+      <workItem from="1736792098552" duration="771000" />
+      <workItem from="1736865411380" duration="2211000" />
+      <workItem from="1737018313301" duration="3260000" />
+      <workItem from="1737373498949" duration="2814000" />
+      <workItem from="1737623126490" duration="1007000" />
+      <workItem from="1737978350768" duration="20000" />
+      <workItem from="1738184717373" duration="1602000" />
+      <workItem from="1738186928321" duration="1065000" />
+      <workItem from="1738227832816" duration="40000" />
+      <workItem from="1738228423409" duration="3383000" />
+      <workItem from="1738410679976" duration="2381000" />
+      <workItem from="1738413090573" duration="1276000" />
+      <workItem from="1738583186796" duration="3666000" />
+      <workItem from="1738619876168" duration="3363000" />
+      <workItem from="1738660838194" duration="1472000" />
+      <workItem from="1738677044672" duration="3211000" />
+      <workItem from="1738860817717" duration="7373000" />
+      <workItem from="1739187603076" duration="4758000" />
+      <workItem from="1739207089556" duration="6018000" />
+      <workItem from="1739264045156" duration="3067000" />
+      <workItem from="1739281773093" duration="5191000" />
+      <workItem from="1739380449198" duration="3548000" />
+      <workItem from="1739436181875" duration="5841000" />
+      <workItem from="1739479406702" duration="1490000" />
+      <workItem from="1739651779359" duration="365000" />
+      <workItem from="1741096553573" duration="824000" />
+      <workItem from="1742462472808" duration="3058000" />
+      <workItem from="1742493233826" duration="1471000" />
+      <workItem from="1742910722074" duration="4312000" />
+      <workItem from="1742921504250" duration="3791000" />
+      <workItem from="1742997594735" duration="2594000" />
+      <workItem from="1743066386944" duration="3862000" />
+      <workItem from="1743071951585" duration="772000" />
+      <workItem from="1743168628047" duration="3678000" />
+      <workItem from="1743417806207" duration="4514000" />
+      <workItem from="1743449854701" duration="5114000" />
+      <workItem from="1743512099978" duration="2931000" />
+      <workItem from="1743523834493" duration="2973000" />
+      <workItem from="1743623295405" duration="4487000" />
+      <workItem from="1743667568274" duration="4115000" />
+      <workItem from="1743677854961" duration="1809000" />
+      <workItem from="1743684510436" duration="1913000" />
+      <workItem from="1743784163721" duration="12561000" />
+      <workItem from="1743850131316" duration="9410000" />
+      <workItem from="1743882660606" duration="12947000" />
+      <workItem from="1744199659015" duration="7901000" />
+      <workItem from="1744305686886" duration="2741000" />
+      <workItem from="1745262974639" duration="70000" />
+      <workItem from="1745837132368" duration="759000" />
+      <workItem from="1745935108623" duration="118000" />
+      <workItem from="1747128840405" duration="101000" />
+      <workItem from="1747131318637" duration="18000" />
+      <workItem from="1760012960175" duration="227000" />
+      <workItem from="1760013397347" duration="429000" />
+      <workItem from="1760019733414" duration="259000" />
+      <workItem from="1760100561528" duration="59000" />
+      <workItem from="1760433700801" duration="434000" />
+      <workItem from="1760627139407" duration="1041000" />
+      <workItem from="1761588317980" duration="300000" />
+      <workItem from="1761643267032" duration="60000" />
+    </task>
+    <task id="LOCAL-00001" summary="First working network layer spike">
+      <option name="closed" value="true" />
+      <created>1720528123553</created>
+      <option name="number" value="00001" />
+      <option name="presentableId" value="LOCAL-00001" />
+      <option name="project" value="LOCAL" />
+      <updated>1720528123553</updated>
+    </task>
+    <task id="LOCAL-00002" summary="Fixed softmax to give a floating point output and accept 2-dimensional input matrices">
+      <option name="closed" value="true" />
+      <created>1720531254840</created>
+      <option name="number" value="00002" />
+      <option name="presentableId" value="LOCAL-00002" />
+      <option name="project" value="LOCAL" />
+      <updated>1720531254840</updated>
+    </task>
+    <task id="LOCAL-00003" summary="Added the loss calculation and commented both the loss and softmax functions">
+      <option name="closed" value="true" />
+      <created>1720619718130</created>
+      <option name="number" value="00003" />
+      <option name="presentableId" value="LOCAL-00003" />
+      <option name="project" value="LOCAL" />
+      <updated>1720619718130</updated>
+    </task>
+    <task id="LOCAL-00004" summary="Working word vector conversions">
+      <option name="closed" value="true" />
+      <created>1723726405265</created>
+      <option name="number" value="00004" />
+      <option name="presentableId" value="LOCAL-00004" />
+      <option name="project" value="LOCAL" />
+      <updated>1723726405265</updated>
+    </task>
+    <task id="LOCAL-00005" summary="Pad_matrix function added">
+      <option name="closed" value="true" />
+      <created>1723910311539</created>
+      <option name="number" value="00005" />
+      <option name="presentableId" value="LOCAL-00005" />
+      <option name="project" value="LOCAL" />
+      <updated>1723910311539</updated>
+    </task>
+    <task id="LOCAL-00006" summary="Fixed pad_matrix function to take input of a tensor and output correctly padded sentences">
+      <option name="closed" value="true" />
+      <created>1725883364505</created>
+      <option name="number" value="00006" />
+      <option name="presentableId" value="LOCAL-00006" />
+      <option name="project" value="LOCAL" />
+      <updated>1725883364505</updated>
+    </task>
+    <task id="LOCAL-00007" summary="Fixed TestData content and added testData lookup to main">
+      <option name="closed" value="true" />
+      <created>1726081227377</created>
+      <option name="number" value="00007" />
+      <option name="presentableId" value="LOCAL-00007" />
+      <option name="project" value="LOCAL" />
+      <updated>1726081227377</updated>
+    </task>
+    <task id="LOCAL-00008" summary="Added search file option and decreased search time by over 30x">
+      <option name="closed" value="true" />
+      <created>1726087955903</created>
+      <option name="number" value="00008" />
+      <option name="presentableId" value="LOCAL-00008" />
+      <option name="project" value="LOCAL" />
+      <updated>1726087955903</updated>
+    </task>
+    <task id="LOCAL-00009" summary="Edited the neural layer to allow for n neurons instead of 3">
+      <option name="closed" value="true" />
+      <created>1731080765493</created>
+      <option name="number" value="00009" />
+      <option name="presentableId" value="LOCAL-00009" />
+      <option name="project" value="LOCAL" />
+      <updated>1731080765495</updated>
+    </task>
+    <task id="LOCAL-00010" summary="Added a word count and commented out test code">
+      <option name="closed" value="true" />
+      <created>1731080893221</created>
+      <option name="number" value="00010" />
+      <option name="presentableId" value="LOCAL-00010" />
+      <option name="project" value="LOCAL" />
+      <updated>1731080893221</updated>
+    </task>
+    <task id="LOCAL-00011" summary="Allowed for a custom batch size">
+      <option name="closed" value="true" />
+      <created>1731081009157</created>
+      <option name="number" value="00011" />
+      <option name="presentableId" value="LOCAL-00011" />
+      <option name="project" value="LOCAL" />
+      <updated>1731081009157</updated>
+    </task>
+    <task id="LOCAL-00012" summary="Added convolution layer class with first 2 functions">
+      <option name="closed" value="true" />
+      <created>1731081098885</created>
+      <option name="number" value="00012" />
+      <option name="presentableId" value="LOCAL-00012" />
+      <option name="project" value="LOCAL" />
+      <updated>1731081098885</updated>
+    </task>
+    <task id="LOCAL-00013" summary="Fixed reflexMatrix to extend the correct amount now">
+      <option name="closed" value="true" />
+      <created>1731349768185</created>
+      <option name="number" value="00013" />
+      <option name="presentableId" value="LOCAL-00013" />
+      <option name="project" value="LOCAL" />
+      <updated>1731349768185</updated>
+    </task>
+    <task id="LOCAL-00014" summary="Added the convolution pass function to convolve an input matrix with a kernel">
+      <option name="closed" value="true" />
+      <created>1731433029637</created>
+      <option name="number" value="00014" />
+      <option name="presentableId" value="LOCAL-00014" />
+      <option name="project" value="LOCAL" />
+      <updated>1731433029637</updated>
+    </task>
+    <task id="LOCAL-00015" summary="Fixed convPass function and allowed for batch input">
+      <option name="closed" value="true" />
+      <created>1731688855235</created>
+      <option name="number" value="00015" />
+      <option name="presentableId" value="LOCAL-00015" />
+      <option name="project" value="LOCAL" />
+      <updated>1731688855235</updated>
+    </task>
+    <task id="LOCAL-00016" summary="Changed the numpy objects to be outputted as python lists">
+      <option name="closed" value="true" />
+      <created>1731690002701</created>
+      <option name="number" value="00016" />
+      <option name="presentableId" value="LOCAL-00016" />
+      <option name="project" value="LOCAL" />
+      <updated>1731690002701</updated>
+    </task>
+    <task id="LOCAL-00017" summary="Convolutional and neural layers connected and functional softmax output.">
+      <option name="closed" value="true" />
+      <created>1733996774827</created>
+      <option name="number" value="00017" />
+      <option name="presentableId" value="LOCAL-00017" />
+      <option name="project" value="LOCAL" />
+      <updated>1733996774827</updated>
+    </task>
+    <task id="LOCAL-00018" summary="Migrated all major databases to SQL ite3 and improved search times for embeddings by over 300x. Old function cleanups required.">
+      <option name="closed" value="true" />
+      <created>1738623310314</created>
+      <option name="number" value="00018" />
+      <option name="presentableId" value="LOCAL-00018" />
+      <option name="project" value="LOCAL" />
+      <updated>1738623310314</updated>
+    </task>
+    <task id="LOCAL-00019" summary="Completed neural layer backpropagation">
+      <option name="closed" value="true" />
+      <created>1739213107420</created>
+      <option name="number" value="00019" />
+      <option name="presentableId" value="LOCAL-00019" />
+      <option name="project" value="LOCAL" />
+      <updated>1739213107420</updated>
+    </task>
+    <task id="LOCAL-00020" summary="Finished convolution layer backpropagation. Values not correctly instantiated.">
+      <option name="closed" value="true" />
+      <created>1743671891304</created>
+      <option name="number" value="00020" />
+      <option name="presentableId" value="LOCAL-00020" />
+      <option name="project" value="LOCAL" />
+      <updated>1743671891304</updated>
+    </task>
+    <task id="LOCAL-00021" summary="Finished project. Final commit for now.">
+      <option name="closed" value="true" />
+      <created>1745935175332</created>
+      <option name="number" value="00021" />
+      <option name="presentableId" value="LOCAL-00021" />
+      <option name="project" value="LOCAL" />
+      <updated>1745935175332</updated>
+    </task>
+    <option name="localTasksCounter" value="22" />
+    <servers />
+  </component>
+  <component name="TypeScriptGeneratedFilesManager">
+    <option name="version" value="3" />
+  </component>
+  <component name="Vcs.Log.Tabs.Properties">
+    <option name="TAB_STATES">
+      <map>
+        <entry key="MAIN">
+          <value>
+            <State>
+              <option name="FILTERS">
+                <map>
+                  <entry key="branch">
+                    <value>
+                      <list>
+                        <option value="origin/master" />
+                      </list>
+                    </value>
+                  </entry>
+                </map>
+              </option>
+            </State>
+          </value>
+        </entry>
+      </map>
+    </option>
+  </component>
+  <component name="VcsManagerConfiguration">
+    <MESSAGE value="First working network layer spike" />
+    <MESSAGE value="Fixed softmax to give a floating point output and accept 2-dimensional input matrices" />
+    <MESSAGE value="Added the loss calculation and commented both the loss and softmax functions" />
+    <MESSAGE value="Working word vector conversions" />
+    <MESSAGE value="Pad_matrix function added" />
+    <MESSAGE value="Fixed pad_matrix function to take input of a tensor and output correctly padded sentences" />
+    <MESSAGE value="Created test data set and converted word embeddings text file to jsonl format for speed" />
+    <MESSAGE value="Fixed TestData content and added testData lookup to main" />
+    <MESSAGE value="Added search file option and decreased search time by over 30x" />
+    <MESSAGE value="Edited the neural layer to allow for n neurons instead of 3" />
+    <MESSAGE value="Added a word count and commented out test code" />
+    <MESSAGE value="Allowed for a custom batch size" />
+    <MESSAGE value="Added convolution layer class with first 2 functions" />
+    <MESSAGE value="Fixed reflexMatrix to extend the correct amount now" />
+    <MESSAGE value="Added the convolution pass function to convolve an input matrix with a kernel" />
+    <MESSAGE value="Fixed convPass function and allowed for batch input" />
+    <MESSAGE value="Changed the numpy objects to be outputted as python lists" />
+    <MESSAGE value="Convolutional and neural layers connected and functional softmax output." />
+    <MESSAGE value="Migrated all major databases to SQL ite3 and improved search times for embeddings by over 300x. Old function cleanups required." />
+    <MESSAGE value="Completed neural layer backpropagation" />
+    <MESSAGE value="Finished convolution layer backpropagation. Values not correctly instantiated." />
+    <MESSAGE value="Finished project. Final commit for now." />
+    <option name="LAST_COMMIT_MESSAGE" value="Finished project. Final commit for now." />
+  </component>
+  <component name="XSLT-Support.FileAssociations.UIState">
+    <expand />
+    <select />
+  </component>
+  <component name="com.intellij.coverage.CoverageDataManagerImpl">
+    <SUITE FILE_PATH="coverage/SentimentAnalyser$Comms.coverage" NAME="Comms Coverage Results" MODIFIED="1743865081764" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/Spike1" />
+    <SUITE FILE_PATH="coverage/SentimentAnalyser$TestDataSetup.coverage" NAME="TestDataSetup Coverage Results" MODIFIED="1726079077434" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/Spike1" />
+    <SUITE FILE_PATH="coverage/SentimentAnalyser$WordEmbeddingsSetup.coverage" NAME="WordEmbeddingsSetup Coverage Results" MODIFIED="1726074190150" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/Spike1" />
+    <SUITE FILE_PATH="coverage/SentimentAnalyser$Test2.coverage" NAME="Test2 Coverage Results" MODIFIED="1744203618000" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/Spike1" />
+    <SUITE FILE_PATH="coverage/SentimentAnalyser$main.coverage" NAME="main Coverage Results" MODIFIED="1761588411758" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/Spike1" />
+    <SUITE FILE_PATH="coverage/SentimentAnalyser$spike1_layer.coverage" NAME="spike1_layer Coverage Results" MODIFIED="1733746401779" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/Spike1" />
+    <SUITE FILE_PATH="coverage/SentimentAnalyser$NeuralLayer.coverage" NAME="NeuralLayer Coverage Results" MODIFIED="1743685748485" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/Spike1" />
+    <SUITE FILE_PATH="coverage/SentimentAnalyser$main_spike.coverage" NAME="main_spike Coverage Results" MODIFIED="1720615218360" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/Spike1" />
+    <SUITE FILE_PATH="coverage/SentimentAnalyser$setup.coverage" NAME="setup Coverage Results" MODIFIED="1720635435189" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/fastText" />
+    <SUITE FILE_PATH="coverage/SentimentAnalyser$WordVectorConversions.coverage" NAME="WordVectorConversions Coverage Results" MODIFIED="1726488765989" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/Spike1" />
+    <SUITE FILE_PATH="coverage/SentimentAnalyser$WordEmbeddings.coverage" NAME="WordEmbeddings Coverage Results" MODIFIED="1720691421396" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/Spike1" />
+    <SUITE FILE_PATH="coverage/SentimentAnalyser$sortWords.coverage" NAME="sortWords Coverage Results" MODIFIED="1727116040637" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/Spike1" />
+    <SUITE FILE_PATH="coverage/SentimentAnalyser$ConvolutionLayer.coverage" NAME="ConvolutionLayer Coverage Results" MODIFIED="1742494637173" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/Spike1" />
+    <SUITE FILE_PATH="coverage/SentimentAnalyser$test.coverage" NAME="test Coverage Results" MODIFIED="1743886953912" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/Spike1" />
+  </component>
+</project>
