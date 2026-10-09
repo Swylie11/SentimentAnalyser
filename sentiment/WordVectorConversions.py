@@ -13,11 +13,23 @@ def get_embedding(line):
     return values[1:]
 
 
+# Smart/curly punctuation normalised to its ASCII equivalent before the strip below.
+# Without this, "don't" (curly ’) and "dont" (straight, stripped by the ASCII
+# punctuation loop) end up as different tokens, and the curly form usually has no
+# GloVe entry and becomes a zero vector.
+SMART_PUNCTUATION = str.maketrans({
+    "‘": "'", "’": "'", "‚": "'", "‛": "'",
+    "“": '"', "”": '"', "„": '"', "‟": '"',
+    "–": "-", "—": "-",
+    "…": "...",
+})
+
+
 def format_entry_data(batch_input):
     """ Converts a list of sentences in the wrong format into a list of cleaned sentences """
     output_batch = []
     for i in range(len(batch_input)):
-        sentence = batch_input[i].lower()  # Convert to lowercase
+        sentence = batch_input[i].lower().translate(SMART_PUNCTUATION)  # Convert to lowercase
         cleaned_sentence = ""
         # Iterate through each character in the sentence
         for char in sentence:

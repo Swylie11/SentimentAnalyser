@@ -1,7 +1,9 @@
 """Trains or runs the sentiment analyser.
 
-Architecture: embeddings -> conv(5x5, stride 5) -> ReLU -> conv(3x3, stride 3)
--> ReLU -> flatten -> five dense ReLU layers -> softmax over five star ratings.
+Architecture: embeddings -> parallel filter bank branches (Kim 2014 style: several
+region sizes, each a bank of filters sliding along the word axis only, ReLU, global
+max-pool over word position) -> concatenate -> five dense ReLU layers -> softmax over
+five star ratings.
 """
 
 import os
@@ -12,7 +14,8 @@ import numpy as np
 
 import Comms as com
 import WordVectorConversions as wvc
-from ConvolutionLayer import ConvLayer
+from FilterBankLayer import FilterBankLayer
+from InitDatabases import FILTER_BANK_CONFIG
 from NeuralLayer import NeuralLayer
 
 # 0.01 was too low for this depth: the overfit test reached 100% on two random
@@ -34,6 +37,16 @@ EVALUATION_CHUNK = 50
 # than round-tripping every parameter through JSON on every single batch.
 CHECKPOINT_EVERY = 25
 
+# How often, in batches, to check progress against a small validation slice during
+# training. Watching this curve is what tells us when a run has plateaued instead of
+# having to guess a batch count in advance.
+VALIDATION_EVERY = 200
+
+# A fixed slice of validation_ids (not a fresh random draw each time) so successive
+# quick checks are comparable to each other. Deliberately smaller than the full
+# VALIDATION_SIZE since this runs many times per training run.
+QUICK_VALIDATION_SIZE = 300
+
 NUM_CLASSES = 5
 
 SENTIMENT_LABELS = {1: "Very negative", 2: "Negative", 3: "Neutral",
@@ -47,26 +60,17 @@ def one_hot_ratings(star_ratings):
     return encoded
 
 
-def flatten_conv_output(inputTensor):
-    """ Flattens a (batch, height, width) convolution output to (batch, height*width).
-
-    One review becomes one feature vector. The batch axis stays as the review axis,
-    so the dense stack, the loss and the labels all agree on what a row means. """
-    tensor = np.asarray(inputTensor, dtype=float)
-    return tensor.reshape(tensor.shape[0], -1)
-
-
 def forward_pass(conv_layers, dense_layers, output_layer, texts):
     """ Runs a batch of review texts through the whole network.
 
     Returns the softmax output, shape (len(texts), 5). """
     conv_input = wvc.pad_matrix(wvc.return_vector_matrix_jsonl(wvc.format_entry_data(texts)))
+    conv_input = np.asarray(conv_input, dtype=float)
 
-    conv1, conv2 = conv_layers
-    conv_output = conv1.convPass(conv1.reflectMatrix(conv_input))
-    conv_output = conv2.convPass(conv2.reflectMatrix(conv_output))
+    # Parallel filter bank branches over the same embedding input, concatenated into
+    # one feature vector -- not a stacked pipeline like the old two ConvLayers.
+    activations = np.concatenate([layer.convPass(conv_input) for layer in conv_layers], axis=1)
 
-    activations = flatten_conv_output(conv_output)
     for layer in dense_layers:
         activations = layer.batch_layer_output(activations)
 
@@ -83,13 +87,14 @@ def backward_pass(conv_layers, dense_layers, output_layer, one_hot):
     for layer in reversed(dense_layers):
         gradient = layer.calculate_derivatives(layer.relu_backward(gradient))
 
-    conv1, conv2 = conv_layers
-
-    # Back to the shape the convolution stack emitted.
-    gradient = np.asarray(gradient).reshape(np.asarray(conv2.output, dtype=float).shape)
-
-    gradient = conv2.backpropagate(gradient, False)
-    conv1.backpropagate(gradient, False)
+    # Split the concatenated gradient back into each branch's slice of features, in
+    # the same order forward_pass concatenated them in. Embeddings are not currently
+    # trained, so branches don't need their input gradient back.
+    start = 0
+    for layer in conv_layers:
+        end = start + layer.num_filters
+        layer.backpropagate(gradient[:, start:end])
+        start = end
 
 
 def class_distribution(values):
@@ -187,13 +192,36 @@ def save_parameters(conv_layers, all_layers):
         layer.save()
 
 
+def snapshot_model(conv_layers, all_layers):
+    """ Copies every trainable array in memory, so training can restore the
+    best-scoring checkpoint seen during a run rather than whatever the final batch
+    happened to leave behind. """
+    return {
+        "conv": [(np.array(layer.kernel, dtype=float).copy(), np.array(layer.bias, dtype=float).copy())
+                for layer in conv_layers],
+        "dense": [(np.array(layer.weights, dtype=float).copy(), np.array(layer.biases, dtype=float).copy())
+                 for layer in all_layers],
+    }
+
+
+def restore_model(conv_layers, all_layers, snapshot):
+    """ Restores a snapshot taken by snapshot_model. """
+    for layer, (kernel, bias) in zip(conv_layers, snapshot["conv"]):
+        layer.kernel = kernel
+        layer.bias = bias
+    for layer, (weights, biases) in zip(all_layers, snapshot["dense"]):
+        layer.weights = weights
+        layer.biases = biases
+
+
 def main():
     mode = int(input("To train a new model, press 1. To test the currently loaded model, press 2.\n"
                      "To load a model, input valid database files into the current folder titled:\n"
                      "'convolution_layers', and 'neuron_weights'.\n"
                      "WARNING: If training a new model, the current neuron weights and kernel files will be overridden.\n"))
 
-    conv_layers = (ConvLayer(1, 5), ConvLayer(2, 3))
+    conv_layers = [FilterBankLayer(layer_num, region_size, num_filters)
+                  for layer_num, region_size, num_filters in FILTER_BANK_CONFIG]
     dense_layers = [NeuralLayer(n) for n in range(1, 6)]
     output_layer = NeuralLayer(6)
     all_layers = list(dense_layers) + [output_layer]
@@ -215,6 +243,7 @@ def main():
         train_ids, validation_ids = com.split_ids(
             com.fetch_all_review_ids(), VALIDATION_SIZE, DATA_SEED)
         print(f"\n{len(train_ids)} training reviews, {len(validation_ids)} held out for validation.")
+        quick_validation_ids = validation_ids[:QUICK_VALIDATION_SIZE]
     else:
         input_sentence = [str(input("Enter data to be tested: "))]
 
@@ -226,6 +255,8 @@ def main():
         seen = 0
         train_predictions = []
         train_labels = []
+        best_quick_accuracy = -1.0
+        best_snapshot = None
 
         # Fetch the currently loaded values once. They are then kept in memory for
         # the whole run and checkpointed to the database at intervals.
@@ -265,6 +296,20 @@ def main():
 
             if (batch_index + 1) % CHECKPOINT_EVERY == 0:
                 save_parameters(conv_layers, all_layers)
+
+            if (batch_index + 1) % VALIDATION_EVERY == 0:
+                quick_exact, quick_within_one, _, _ = evaluate(
+                    conv_layers, dense_layers, output_layer, quick_validation_ids)
+                print(f"  [batch {batch_index + 1}] quick validation: "
+                     f"{100 * quick_exact:.2f}% exact, {100 * quick_within_one:.2f}% within one")
+                if quick_exact > best_quick_accuracy:
+                    best_quick_accuracy = quick_exact
+                    best_snapshot = snapshot_model(conv_layers, all_layers)
+
+        if best_snapshot is not None:
+            restore_model(conv_layers, all_layers, best_snapshot)
+            print(f"\nRestored best checkpoint seen during training "
+                 f"(quick validation accuracy {100 * best_quick_accuracy:.2f}%).")
 
         save_parameters(conv_layers, all_layers)
 

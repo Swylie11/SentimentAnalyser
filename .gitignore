@@ -6,3 +6,9 @@ __pycache__/
 *.pyc
 .venv/
 venv/
+
+# IDE
+.idea/
+
+# Downloaded datasets
+Data/

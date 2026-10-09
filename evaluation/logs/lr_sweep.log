@@ -1,0 +1,8 @@
+98000 training reviews, sweeping 4 learning rates over 300 batches of 32 each, quick-validating on 300 held-out reviews.
+
+  LR 0.003   train_acc  19.58%  avg_loss  1.6162  quick_val_acc  19.33%  within_one  50.00%               88.0s
+  LR 0.01    train_acc  20.81%  avg_loss  1.6130  quick_val_acc  20.00%  within_one  56.67%               79.2s
+  LR 0.03    train_acc  20.79%  avg_loss  1.6116  quick_val_acc  26.33%  within_one  59.67%               76.2s
+  LR 0.1     train_acc  20.20%  avg_loss  1.6122  quick_val_acc  21.67%  within_one  59.67%               75.9s
+
+Best by quick validation exact accuracy: LR=0.03 (26.33% exact, 59.67% within one)

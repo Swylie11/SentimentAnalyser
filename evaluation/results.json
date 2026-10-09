@@ -1,0 +1,340 @@
+{
+  "test_set": "C:\\Users\\samja\\Documents\\SchoolWork\\ComputerScience\\Project\\SentimentAnalyser\\Data\\eval_test.jsonl",
+  "model_dir": "C:\\Users\\samja\\Documents\\SchoolWork\\ComputerScience\\Project\\SentimentAnalyser\\sentiment",
+  "test": {
+    "n": 2000,
+    "exact": 0.47,
+    "exact_ci": [
+      0.44820442902962754,
+      0.49191059802640313
+    ],
+    "exact_k": 940,
+    "within_one": 0.8615,
+    "within_one_ci": [
+      0.8456667354281623,
+      0.8759471885466671
+    ],
+    "recall": [
+      0.685,
+      0.2625,
+      0.34,
+      0.425,
+      0.6375
+    ],
+    "confusion": [
+      [
+        274,
+        71,
+        37,
+        11,
+        7
+      ],
+      [
+        137,
+        105,
+        122,
+        28,
+        8
+      ],
+      [
+        74,
+        68,
+        136,
+        98,
+        24
+      ],
+      [
+        13,
+        25,
+        90,
+        170,
+        102
+      ],
+      [
+        14,
+        12,
+        24,
+        95,
+        255
+      ]
+    ],
+    "prediction_counts": [
+      512,
+      281,
+      409,
+      402,
+      396
+    ],
+    "label_counts": [
+      400,
+      400,
+      400,
+      400,
+      400
+    ],
+    "collapsed": false
+  },
+  "train_slice": {
+    "n": 2000,
+    "exact": 0.593,
+    "exact_ci": [
+      0.5713105472851714,
+      0.6143328688411331
+    ],
+    "exact_k": 1186,
+    "within_one": 0.934,
+    "within_one_ci": [
+      0.9222651699594729,
+      0.944070771963282
+    ],
+    "recall": [
+      0.7633802816901408,
+      0.39097744360902253,
+      0.5069767441860465,
+      0.6294416243654822,
+      0.6943127962085308
+    ],
+    "confusion": [
+      [
+        271,
+        61,
+        19,
+        2,
+        2
+      ],
+      [
+        115,
+        156,
+        109,
+        18,
+        1
+      ],
+      [
+        32,
+        89,
+        218,
+        83,
+        8
+      ],
+      [
+        10,
+        15,
+        59,
+        248,
+        62
+      ],
+      [
+        9,
+        7,
+        9,
+        104,
+        293
+      ]
+    ],
+    "prediction_counts": [
+      437,
+      328,
+      414,
+      455,
+      366
+    ],
+    "label_counts": [
+      355,
+      399,
+      430,
+      394,
+      422
+    ],
+    "collapsed": false
+  },
+  "validation_selection": {
+    "n": 300,
+    "exact": 0.5566666666666666,
+    "exact_ci": [
+      0.5000863411296723,
+      0.611814070137251
+    ],
+    "exact_k": 167,
+    "within_one": 0.91,
+    "within_one_ci": [
+      0.8722221947968226,
+      0.9374101926050341
+    ],
+    "recall": [
+      0.7049180327868853,
+      0.31666666666666665,
+      0.4909090909090909,
+      0.6212121212121212,
+      0.6379310344827587
+    ],
+    "confusion": [
+      [
+        43,
+        12,
+        5,
+        0,
+        1
+      ],
+      [
+        19,
+        19,
+        17,
+        4,
+        1
+      ],
+      [
+        9,
+        7,
+        27,
+        12,
+        0
+      ],
+      [
+        1,
+        3,
+        10,
+        41,
+        11
+      ],
+      [
+        0,
+        0,
+        3,
+        18,
+        37
+      ]
+    ],
+    "prediction_counts": [
+      72,
+      41,
+      62,
+      75,
+      50
+    ],
+    "label_counts": [
+      61,
+      60,
+      55,
+      66,
+      58
+    ],
+    "collapsed": false
+  },
+  "validation_rest": {
+    "n": 1700,
+    "exact": 0.5205882352941177,
+    "exact_ci": [
+      0.49682022469046944,
+      0.5442634065578815
+    ],
+    "exact_k": 885,
+    "within_one": 0.8952941176470588,
+    "within_one_ci": [
+      0.8798373922779712,
+      0.9089683276903637
+    ],
+    "recall": [
+      0.6358208955223881,
+      0.32463768115942027,
+      0.4178272980501393,
+      0.5828402366863905,
+      0.6594427244582043
+    ],
+    "confusion": [
+      [
+        213,
+        83,
+        27,
+        7,
+        5
+      ],
+      [
+        115,
+        112,
+        88,
+        19,
+        11
+      ],
+      [
+        49,
+        67,
+        150,
+        85,
+        8
+      ],
+      [
+        6,
+        13,
+        62,
+        197,
+        60
+      ],
+      [
+        14,
+        5,
+        14,
+        77,
+        213
+      ]
+    ],
+    "prediction_counts": [
+      397,
+      280,
+      341,
+      385,
+      297
+    ],
+    "label_counts": [
+      335,
+      345,
+      359,
+      338,
+      323
+    ],
+    "collapsed": false
+  },
+  "train_test_gap": {
+    "exact_gap": 0.123,
+    "z": 7.794686979535315
+  },
+  "selection_inflation": {
+    "exact_gap": 0.03607843137254896,
+    "z": 1.1538137076879522
+  },
+  "leakage": {
+    "test": {
+      "n": 2000,
+      "exact_duplicates": 0,
+      "near_duplicates": 4
+    },
+    "validation": {
+      "n": 2000,
+      "exact_duplicates": 21,
+      "near_duplicates": 26
+    }
+  },
+  "baselines": {
+    "uniform_exact": 0.2,
+    "uniform_within_one": 0.52,
+    "best_constant": 1,
+    "best_constant_exact": 0.2,
+    "best_constant_within_one": 0.4,
+    "n": 2000
+  },
+  "zero_vector_rate": {
+    "test": 0.010633672467980968,
+    "train_slice": 0.013611976137770607
+  },
+  "databases_unchanged": true,
+  "checkpoint": {
+    "neuron_weights.db": {
+      "sha256": "0b5f715cc00b68c2308786d7e34c9f8b39939f4085764becfa40e8eb2f9d191d",
+      "modified": "2026-09-09 19:03:19"
+    },
+    "convolution_layers.db": {
+      "sha256": "f784ac7356c48a883ffd5b19fcb101bb2b7202bf4aab61ab6858fe6c9f14560d",
+      "modified": "2026-09-09 19:03:19"
+    }
+  },
+  "seconds": 94.9
+}

@@ -1,0 +1,68 @@
+
+FRESH TEST SET (never seen, never used for selection) (n=2000)
+  Exact accuracy   :  47.0%   95% CI [ 44.8%,  49.2%]
+  Within one star  :  86.2%   95% CI [ 84.6%,  87.6%]
+  Recall per star  : 1*:  68.5%  2*:  26.2%  3*:  34.0%  4*:  42.5%  5*:  63.7%
+  Predictions      : 1*:   512  2*:   281  3*:   409  4*:   402  5*:   396
+  Confusion (rows = true star, columns = predicted star):
+    1* |   274    71    37    11     7
+    2* |   137   105   122    28     8
+    3* |    74    68   136    98    24
+    4* |    13    25    90   170   102
+    5* |    14    12    24    95   255
+
+TRAINING SLICE (reviews the model trained on) (n=2000)
+  Exact accuracy   :  59.3%   95% CI [ 57.1%,  61.4%]
+  Within one star  :  93.4%   95% CI [ 92.2%,  94.4%]
+  Recall per star  : 1*:  76.3%  2*:  39.1%  3*:  50.7%  4*:  62.9%  5*:  69.4%
+  Predictions      : 1*:   437  2*:   328  3*:   414  4*:   455  5*:   366
+  Confusion (rows = true star, columns = predicted star):
+    1* |   271    61    19     2     2
+    2* |   115   156   109    18     1
+    3* |    32    89   218    83     8
+    4* |    10    15    59   248    62
+    5* |     9     7     9   104   293
+
+VALIDATION, first 300 (used by main.py to pick the checkpoint) (n=300)
+  Exact accuracy   :  55.7%   95% CI [ 50.0%,  61.2%]
+  Within one star  :  91.0%   95% CI [ 87.2%,  93.7%]
+  Recall per star  : 1*:  70.5%  2*:  31.7%  3*:  49.1%  4*:  62.1%  5*:  63.8%
+  Predictions      : 1*:    72  2*:    41  3*:    62  4*:    75  5*:    50
+  Confusion (rows = true star, columns = predicted star):
+    1* |    43    12     5     0     1
+    2* |    19    19    17     4     1
+    3* |     9     7    27    12     0
+    4* |     1     3    10    41    11
+    5* |     0     0     3    18    37
+
+VALIDATION, remaining reviews (not used for selection) (n=1700)
+  Exact accuracy   :  52.1%   95% CI [ 49.7%,  54.4%]
+  Within one star  :  89.5%   95% CI [ 88.0%,  90.9%]
+  Recall per star  : 1*:  63.6%  2*:  32.5%  3*:  41.8%  4*:  58.3%  5*:  65.9%
+  Predictions      : 1*:   397  2*:   280  3*:   341  4*:   385  5*:   297
+  Confusion (rows = true star, columns = predicted star):
+    1* |   213    83    27     7     5
+    2* |   115   112    88    19    11
+    3* |    49    67   150    85     8
+    4* |     6    13    62   197    60
+    5* |    14     5    14    77   213
+
+== Gaps ==
+  Train minus test exact accuracy: +12.3 points (z=7.79, outside noise)
+  Selection slice minus rest of validation: +3.6 points (z=1.15, within noise)
+
+== Leakage against the training reviews ==
+  test      : 0 exact and 4 near duplicates (Jaccard >= 0.8) of 2000 reviews
+  validation: 21 exact and 26 near duplicates (Jaccard >= 0.8) of 2000 reviews
+
+== Baselines on the test set ==
+  Uniform random      : exact  20.0%, within one  52.0%
+  Always predict 1*   : exact  20.0%, within one  40.0%
+
+== Words with no embedding (read as a zero vector) ==
+  test   1.1%, train slice   1.4%
+  (The embedding table only holds words from the training corpus, so a higher
+   test rate is a real handicap the model also has when deployed.)
+
+Databases unchanged by this run: True
+Wrote C:\Users\samja\Documents\SchoolWork\ComputerScience\Project\SentimentAnalyser\evaluation\results.json

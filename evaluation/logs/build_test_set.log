@@ -1,0 +1,30 @@
+  read 2,500,000 lines, 8,000/8,000 sampled
+  read 3,000,000 lines, 8,000/8,000 sampled
+  read 3,500,000 lines, 8,000/8,000 sampled
+  read 4,000,000 lines, 8,000/8,000 sampled
+  read 4,500,000 lines, 8,000/8,000 sampled
+  read 4,880,181 lines, 2,533,839 within the 15-200 word window
+    1*:  403,505 eligible ->  1,600 sampled
+    2*:  154,784 eligible ->  1,600 sampled
+    3*:  250,086 eligible ->  1,600 sampled
+    4*:  490,429 eligible ->  1,600 sampled
+    5*: 1,235,035 eligible ->  1,600 sampled
+99,333 distinct training reviews will be excluded.
+Sampling candidates from C:\Users\samja\Documents\SchoolWork\ComputerScience\Project\SentimentAnalyser\Data\Software.jsonl.gz
+Wrote 2,000 reviews to C:\Users\samja\Documents\SchoolWork\ComputerScience\Project\SentimentAnalyser\Data\eval_test.jsonl
+Wrote manifest to C:\Users\samja\Documents\SchoolWork\ComputerScience\Project\SentimentAnalyser\Data\eval_test.manifest.json
+{
+  "seed": 1,
+  "source": "Software.jsonl.gz",
+  "per_class_requested": 400,
+  "per_class_kept": {
+    "1": 400,
+    "2": 400,
+    "3": 400,
+    "4": 400,
+    "5": 400
+  },
+  "total": 2000,
+  "candidates_dropped_in_training": 22,
+  "candidates_dropped_repeated": 0
+}

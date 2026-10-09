@@ -25,11 +25,12 @@ import time
 
 import numpy as np
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "sentiment"))
 
 import Comms as com  # noqa: E402
 import WordVectorConversions as wvc  # noqa: E402
-from ConvolutionLayer import ConvLayer  # noqa: E402
+from FilterBankLayer import FilterBankLayer  # noqa: E402
+from InitDatabases import FILTER_BANK_CONFIG  # noqa: E402
 from NeuralLayer import NeuralLayer  # noqa: E402
 
 NUM_CLASSES = 5
@@ -44,7 +45,8 @@ def build_network(seed):
     # whole run reproducible. Without it the result swings on initialisation luck.
     np.random.seed(seed)
 
-    conv_layers = (ConvLayer(1, 5), ConvLayer(2, 3))
+    conv_layers = [FilterBankLayer(layer_num, region_size, num_filters)
+                  for layer_num, region_size, num_filters in FILTER_BANK_CONFIG]
     dense_layers = [NeuralLayer(n) for n in range(1, 6)]
     output_layer = NeuralLayer(6)
     all_layers = dense_layers + [output_layer]
@@ -65,12 +67,10 @@ def build_network(seed):
 def train_step(conv_layers, dense_layers, output_layer, all_layers,
                embeddings, one_hot, stars, learning_rate):
     """One forward pass, one backward pass and one parameter update."""
-    conv1, conv2 = conv_layers
+    # Parallel filter bank branches over the same embedding input, concatenated --
+    # not a stacked pipeline like the old two ConvLayers.
+    activations = np.concatenate([layer.convPass(embeddings) for layer in conv_layers], axis=1)
 
-    conv_output = conv1.convPass(conv1.reflectMatrix(embeddings))
-    conv_output = conv2.convPass(conv2.reflectMatrix(conv_output))
-
-    activations = np.asarray(conv_output, dtype=float).reshape(len(stars), -1)
     for layer in dense_layers:
         activations = layer.batch_layer_output(activations)
     softmax_output = output_layer.softmax(activations)[1]
@@ -83,9 +83,13 @@ def train_step(conv_layers, dense_layers, output_layer, all_layers,
     for layer in reversed(dense_layers):
         gradient = layer.calculate_derivatives(layer.relu_backward(gradient))
 
-    gradient = np.asarray(gradient).reshape(np.asarray(conv2.output, dtype=float).shape)
-    gradient = conv2.backpropagate(gradient, False)
-    conv1.backpropagate(gradient, False)
+    # Split the concatenated gradient back into each branch's slice of features, in
+    # the same order they were concatenated above.
+    start_column = 0
+    for layer in conv_layers:
+        end_column = start_column + layer.num_filters
+        layer.backpropagate(gradient[:, start_column:end_column])
+        start_column = end_column
 
     for layer in all_layers:
         layer.adjust_values(learning_rate)
@@ -169,7 +173,7 @@ def main():
         print(f"\nFAIL  reached only {100 * accuracy:.2f}% training accuracy, needed "
               f"{100 * REQUIRED_ACCURACY:.0f}%.\n"
               "      A correctly wired network must be able to memorise this sample.\n"
-              "      Run tests/test_gradients.py and tests/test_conv_gradients.py first.")
+              "      Run tests/test_gradients.py and tests/test_filterbank_gradients.py first.")
         return 1
 
     print(f"\npass  overfit {args.reviews} reviews to {100 * accuracy:.2f}% training accuracy")

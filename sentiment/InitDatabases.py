@@ -12,8 +12,9 @@ It has two modes:
                 Imports the real data from the .jsonl files produced by
                 WordEmbeddingsSetup.py and TestDataSetup.py.
 
-Layer shapes are derived by running one forward pass through the convolution
-layers, so the dense stack always matches whatever the kernels actually emit.
+The dense stack's input width is one feature per filter bank filter, summed across
+every branch in FILTER_BANK_CONFIG -- global max-pooling makes this independent of
+review length, so it is computed directly rather than measured with a dummy pass.
 """
 
 import argparse
@@ -31,9 +32,12 @@ WEIGHTS_DB = os.path.join(HERE, "neuron_weights.db")
 EMBEDDINGS_DB = os.path.join(HERE, "word_embeddings.db")
 TEST_DATA_DB = os.path.join(HERE, "test_data.db")
 
-# Kernel sizes for the two convolution layers. The stride is set in main.py
-# where the ConvLayer objects are constructed.
-KERNEL_SHAPES = {1: (5, 5), 2: (3, 3)}
+# Parallel filter bank branches, Kim (2014) style: (LayerNum, region_size, num_filters).
+# Each branch slides its filters along the word axis only (kernel width is always the
+# full embedding dimension) and globally max-pools over word position, so branches run
+# in parallel over the same embedding input rather than stacking like the old
+# ConvLayer pair did. See FilterBankLayer.py.
+FILTER_BANK_CONFIG = [(1, 3, 100), (2, 4, 100), (3, 5, 100)]
 
 # Widths of the dense stack after the flatten. The input width is measured, and
 # the final 5 is the number of star ratings.
@@ -45,9 +49,16 @@ MAX_WORDS = 200
 
 
 def create_schemas():
-    """Creates every table the model reads, without dropping existing rows."""
+    """Creates every table the model reads, without dropping existing rows.
+
+    The kernels table is the one exception: it only ever holds regenerable,
+    backed-up model state (never source data), and its old schema (kernel only, no
+    bias) predates FilterBankLayer, so it is dropped and recreated with a bias column
+    rather than migrated in place.
+    """
     with sqlite3.connect(CONV_DB) as conn:
-        conn.execute("CREATE TABLE IF NOT EXISTS kernels (LayerNum INTEGER PRIMARY KEY, kernel TEXT)")
+        conn.execute("DROP TABLE IF EXISTS kernels")
+        conn.execute("CREATE TABLE kernels (LayerNum INTEGER PRIMARY KEY, kernel TEXT, bias TEXT)")
 
     with sqlite3.connect(WEIGHTS_DB) as conn:
         conn.execute("CREATE TABLE IF NOT EXISTS weights (LayerNum INTEGER PRIMARY KEY, weights TEXT, biases TEXT)")
@@ -61,31 +72,38 @@ def create_schemas():
 
 
 def seed_kernels():
-    """Writes placeholder kernels so ConvLayer.fetchKernel has a shape to read."""
+    """Writes placeholder kernels and biases so FilterBankLayer.fetchKernel has a
+    shape to read."""
     with sqlite3.connect(CONV_DB) as conn:
-        for layer_num, (rows, cols) in KERNEL_SHAPES.items():
-            kernel = np.zeros((rows, cols)).tolist()
-            conn.execute("INSERT OR REPLACE INTO kernels (LayerNum, kernel) VALUES (?, ?)",
-                         (layer_num, str(kernel)))
+        for layer_num, region_size, num_filters in FILTER_BANK_CONFIG:
+            kernel = np.zeros((num_filters, region_size, EMBEDDING_DIM)).tolist()
+            bias = np.zeros(num_filters).tolist()
+            conn.execute("INSERT OR REPLACE INTO kernels (LayerNum, kernel, bias) VALUES (?, ?, ?)",
+                         (layer_num, str(kernel), str(bias)))
 
 
-def measure_flattened_width():
-    """Runs one forward pass through both convolution layers to size the dense stack."""
-    from ConvolutionLayer import ConvLayer
+def flattened_width():
+    """The dense stack's input width: one feature per filter, concatenated across
+    every branch. Global max-pooling makes this independent of MAX_WORDS/WORD_LIMIT,
+    unlike the old stacked-conv design which needed a dummy forward pass to measure it."""
+    return sum(num_filters for _, _, num_filters in FILTER_BANK_CONFIG)
 
-    conv1 = ConvLayer(1, 5)
-    conv2 = ConvLayer(2, 3)
-    conv1.fetchKernel()
-    conv2.fetchKernel()
 
-    # A single all-zero review of the maximum supported length.
-    dummy = [np.zeros((MAX_WORDS, EMBEDDING_DIM)).tolist()]
+def sanity_check_filter_banks():
+    """Runs one forward pass per branch on a dummy all-zero review, purely to catch
+    config typos (e.g. a region size larger than MAX_WORDS) before a real run."""
+    from FilterBankLayer import FilterBankLayer
 
-    out1 = conv1.convPass(conv1.reflectMatrix(dummy))
-    out2 = conv2.convPass(conv2.reflectMatrix(out1))
-
-    shape = np.asarray(out2, dtype=float).shape  # (batch, height, width)
-    return int(shape[1] * shape[2])
+    dummy = np.zeros((1, MAX_WORDS, EMBEDDING_DIM))
+    for layer_num, region_size, num_filters in FILTER_BANK_CONFIG:
+        assert region_size <= MAX_WORDS, (
+            f"branch {layer_num}: region_size {region_size} exceeds MAX_WORDS {MAX_WORDS}")
+        layer = FilterBankLayer(layer_num, region_size, num_filters, EMBEDDING_DIM)
+        layer.kernel = np.zeros((num_filters, region_size, EMBEDDING_DIM))
+        layer.bias = np.zeros(num_filters)
+        output = layer.convPass(dummy)
+        assert output.shape == (1, num_filters), (
+            f"branch {layer_num} produced shape {output.shape}, expected (1, {num_filters})")
 
 
 def seed_layers(input_width):
@@ -217,6 +235,7 @@ def main():
 
     create_schemas()
     seed_kernels()
+    sanity_check_filter_banks()
 
     if args.embeddings:
         import_embeddings(args.embeddings)
@@ -225,7 +244,7 @@ def main():
     if args.synthetic:
         seed_synthetic(args.synthetic, args.seed)
 
-    seed_layers(measure_flattened_width())
+    seed_layers(flattened_width())
     print("Databases ready.")
 
 

@@ -77,13 +77,13 @@ def fetch_batch(review_ids):
 
 
 def fetch_kernel(LayerNum):
-    """Returns the stored kernel for a convolution layer."""
+    """Returns (kernel, bias) for a filter bank layer."""
     row = connect("convolution_layers.db").execute(
-        "SELECT kernel FROM kernels WHERE LayerNum = ?", (LayerNum,)).fetchone()
+        "SELECT kernel, bias FROM kernels WHERE LayerNum = ?", (LayerNum,)).fetchone()
 
     if row is None:
         raise LookupError(f"No kernel row for LayerNum={LayerNum}. Run InitDatabases.py.")
-    return ast.literal_eval(row[0])
+    return ast.literal_eval(row[0]), ast.literal_eval(row[1])
 
 
 def fetch_layer(LayerNum):
@@ -171,11 +171,11 @@ def update_values(layer_number, new_weights, new_biases):
     conn.commit()
 
 
-def update_kernel(new_kernel, layer_number):
-    """Writes a convolution layer's kernel back to the database."""
+def update_kernel(new_kernel, layer_number, new_bias):
+    """Writes a filter bank layer's kernel and bias back to the database."""
     conn = connect("convolution_layers.db")
-    conn.execute("UPDATE kernels SET kernel = ? WHERE LayerNum = ?",
-                 (str(new_kernel), layer_number))
+    conn.execute("UPDATE kernels SET kernel = ?, bias = ? WHERE LayerNum = ?",
+                 (str(new_kernel), str(new_bias), layer_number))
     conn.commit()
 
 
