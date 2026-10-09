@@ -1,11 +1,11 @@
-# Starling 1.0
+# Wren 1.0
 
 Five-class (1 to 5 star) Amazon review sentiment model: a Kim 2014 style text CNN
 written from scratch in NumPy. See the repository README for the full description.
 
 | | |
 |---|---|
-| Name | Starling |
+| Name | Wren |
 | Version | 1.0 |
 | Architecture | GloVe-style 300d embeddings (frozen) -> filter banks (regions 3, 4, 5 x 100 filters, ReLU, global max-pool) -> dense 300-256-128-64-32-16-5 -> softmax |
 | Parameters | 481,201 (360,300 filter banks, 120,901 dense) |
@@ -40,4 +40,4 @@ sha256 `eec09aec1fa3928cd1189820709bd7a70b29ef7c0c6989db25193fe55bb2ab4c`.
 "the" does not match GloVe 6B 300d. Rebuilding the table from `glove.6B.300d.txt` would
 produce different vectors and these weights would not work with it. Before release,
 either identify the source of this table or ship a version restricted to the
-vocabulary Starling needs.
+vocabulary Wren needs.
