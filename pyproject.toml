@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=64"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -8,6 +8,8 @@ version = "1.0.0"
 description = "Five-class (1 to 5 star) review sentiment analyser: a text CNN written from scratch in NumPy."
 readme = "README.md"
 requires-python = ">=3.9"
+license = "MIT"
+license-files = ["LICENSE"]
 dependencies = ["numpy>=1.24"]
 
 [project.scripts]

@@ -265,7 +265,7 @@ files and stops unless the probabilities agree.
 
 ## Licences and credits
 
-- The code in this repository is the project's own.
+- The code in this repository is MIT licensed (see `LICENSE`).
 - The word vectors are fastText `wiki-news-300d-1M` from Mikolov, Grave, Bojanowski,
   Puhrsch and Joulin, *Advances in Pre-Training Distributed Word Representations*
   (LREC 2018), licensed CC BY-SA 3.0. `wren-1.0-embeddings.npz` is a subset of those

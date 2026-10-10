@@ -37,9 +37,6 @@ checkpoint. `wren-1.0-embeddings.npz` holds `words` (37,498) and float32 `vector
 Checked at export: the 2,000 test reviews give the same probabilities from these files
 as from the original databases (max difference 4.9e-08) and the same 47.0% exact accuracy.
 
-The earlier `neuron_weights.db` and `convolution_layers.db` copies in this folder are
-superseded and can be deleted.
-
 ## Embeddings
 
 The embeddings are **fastText `wiki-news-300d-1M`** (Mikolov, Grave, Bojanowski,
