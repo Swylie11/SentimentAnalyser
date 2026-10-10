@@ -16,7 +16,7 @@ def get_embedding(line):
 # Smart/curly punctuation normalised to its ASCII equivalent before the strip below.
 # Without this, "don't" (curly ’) and "dont" (straight, stripped by the ASCII
 # punctuation loop) end up as different tokens, and the curly form usually has no
-# GloVe entry and becomes a zero vector.
+# embedding entry and becomes a zero vector.
 SMART_PUNCTUATION = str.maketrans({
     "‘": "'", "’": "'", "‚": "'", "‛": "'",
     "“": '"', "”": '"', "„": '"', "‟": '"',

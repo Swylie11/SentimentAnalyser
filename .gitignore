@@ -12,3 +12,6 @@ venv/
 
 # Downloaded datasets
 Data/
+
+# Model artifacts are distributed as release assets, not committed.
+models/*/*.npz

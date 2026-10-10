@@ -1,7 +1,7 @@
 """Builds the two .jsonl files InitDatabases.py imports, from real source data.
 
 This replaces the hardcoded-path scripts (TestDataSetup.py, WordEmbeddingsSetup.py)
-for the Amazon Reviews 2023 dump and a GloVe embeddings file. It differs from them
+for the Amazon Reviews 2023 dump and the fastText wiki-news-300d-1M embeddings file. It differs from them
 in three ways that matter for getting an honest accuracy figure:
 
   Balanced classes   Amazon ratings skew hard to 5 star. Taking the file in order
@@ -21,13 +21,13 @@ in three ways that matter for getting an honest accuracy figure:
                      handles the escaping.
 
 The embedding table is restricted to the vocabulary the corpus actually uses.
-GloVe's full 400k words would make a multi-gigabyte SQLite table that the model
-would never read most of. Words absent from GloVe keep the existing behaviour:
+The full 1M word fastText file would make a multi-gigabyte SQLite table that the model
+would never read most of. Words absent from fastText keep the existing behaviour:
 Comms.fetch_embedding returns a zero vector for them.
 
 Usage:
     python RealDataSetup.py --reviews-gz  ../../Data/Software.jsonl.gz \
-                            --glove       ../../Data/glove.6B.300d.txt \
+                            --vec         ../../Data/wiki-news-300d-1M.vec \
                             --per-class   1000 \
                             --out-dir     ../../Data
 """
@@ -157,12 +157,12 @@ def corpus_vocabulary(rows):
     return vocab
 
 
-def write_embeddings(glove_path, vocab, out_path):
-    """Writes GloVe vectors for the corpus vocabulary as {"word":..., "vector":[...]}."""
+def write_embeddings(vec_path, vocab, out_path):
+    """Writes fastText vectors for the corpus vocabulary as {"word":..., "vector":[...]}."""
     written = 0
     dim = None
 
-    with open(glove_path, "r", encoding="utf-8", errors="replace") as f, \
+    with open(vec_path, "r", encoding="utf-8", errors="replace") as f, \
             open(out_path, "w", encoding="utf-8") as e:
         for line in f:
             parts = line.rstrip("\n").split(" ")
@@ -187,11 +187,11 @@ def write_embeddings(glove_path, vocab, out_path):
     covered = 100.0 * written / max(len(vocab), 1)
     print(f"Wrote {written:,} embeddings (dim {dim}) to {out_path}")
     print(f"Vocabulary coverage: {written:,}/{len(vocab):,} tokens ({covered:.1f}%) "
-          f"found in GloVe; the rest fall back to zero vectors.")
+          f"found in the .vec file; the rest fall back to zero vectors.")
 
     if dim is not None and dim != wvc.EMBEDDING_DIM:
         print(f"\nWARNING: embeddings are {dim}-dimensional but the model expects "
-              f"{wvc.EMBEDDING_DIM}. Use the 300d GloVe file.")
+              f"{wvc.EMBEDDING_DIM}. Use wiki-news-300d-1M.vec.")
 
     return written, dim
 
@@ -201,8 +201,8 @@ def main():
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--reviews-gz", required=True,
                         help="Amazon Reviews 2023 .jsonl or .jsonl.gz")
-    parser.add_argument("--glove", required=True,
-                        help="GloVe embeddings .txt (300d)")
+    parser.add_argument("--vec", required=True,
+                        help="fastText wiki-news-300d-1M.vec")
     parser.add_argument("--per-class", type=int, default=1000,
                         help="Reviews to sample per star rating (default 1000)")
     parser.add_argument("--out-dir", default=".", help="Where to write the .jsonl files")
@@ -225,7 +225,7 @@ def main():
 
     vocab = corpus_vocabulary(rows)
     print(f"Corpus vocabulary: {len(vocab):,} distinct tokens")
-    write_embeddings(args.glove, vocab, embeddings_out)
+    write_embeddings(args.vec, vocab, embeddings_out)
 
     print("\nNext:")
     print(f"  python InitDatabases.py --reviews {reviews_out} --embeddings {embeddings_out}")

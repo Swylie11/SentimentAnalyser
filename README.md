@@ -22,7 +22,7 @@ A review goes in as text and comes out as a probability for each of the five rat
 ```
 review text
   -> lowercase, strip punctuation and digits, split into words
-  -> look each word up in GloVe 6B 300-dimensional embeddings (frozen)
+  -> look each word up in fastText wiki-news 300-dimensional embeddings (frozen)
   -> pad with a tiny constant, or truncate, to 200 words              (200 x 300)
   -> three parallel filter banks over the word axis:
         region 3 words x 100 filters
@@ -57,9 +57,9 @@ weight decay and no learning rate schedule. During training the quick validation
 score is checked every 200 batches and the best checkpoint is restored at the end.
 
 **What it is not.** It is not a pretrained language model and it has no notion of word
-order beyond 3 to 5 word windows, negation across a longer span, or sarcasm. The
-embedding table only contains words from the training corpus, so a word it never saw
-in training is read as a zero vector (about 1% of the tokens in unseen reviews).
+order beyond 3 to 5 word windows, negation across a longer span, or sarcasm. A
+word with no embedding is read as a zero vector (about 1% of the tokens in the
+training and test reviews; mostly typos and glued tokens such as `itbr`).
 
 ## Results
 
@@ -124,7 +124,7 @@ Three things changed between the 22.4% and the 47.0%: the architecture (a single
 5x5 then 3x3 convolution compressed the 200 x 300 embedding matrix into 280 features,
 which was the bottleneck, and most of every input was padding), the amount of data (3,000
 training reviews to 98,000), and normalising curly apostrophes so words like `don’t`
-reach GloVe. Regularisation has not been tried yet.
+reach the embedding table. Regularisation has not been tried yet.
 
 ## Setup
 
@@ -134,8 +134,8 @@ python -m venv .venv
 pip install -r requirements.txt   # numpy, scipy
 ```
 
-The four SQLite databases are not in the repository and must be built (or downloaded;
-see the pretrained weights note below). They live in `sentiment/`:
+The four SQLite databases are not in the repository and must be built (or created
+from the Wren 1.0 files; see Pretrained weights below). They live in `sentiment/`:
 `test_data.db` (the reviews), `word_embeddings.db`, `neuron_weights.db` and
 `convolution_layers.db` (the trained parameters).
 
@@ -151,18 +151,20 @@ curl -L -o Data/Software.jsonl.gz \
   https://mcauleylab.ucsd.edu/public_datasets/data/amazon_2023/raw/review_categories/Software.jsonl.gz
 ```
 
-**Embeddings.** GloVe 6B, 300 dimensional, to match `EMBEDDING_DIM`:
+**Embeddings.** fastText `wiki-news-300d-1M.vec` (999,994 words, 300 dimensional), which
+is what the shipped Wren 1.0 weights were trained with. The weights only work with
+these exact vectors, so do not substitute GloVe or another fastText file:
 
 ```bash
-curl -L -o Data/glove.6B.zip https://huggingface.co/stanfordnlp/glove/resolve/main/glove.6B.zip
-unzip -j Data/glove.6B.zip glove.6B.300d.txt -d Data/
+curl -L -o Data/wiki-news-300d-1M.vec.zip https://dl.fbaipublicfiles.com/fasttext/vectors-english/wiki-news-300d-1M.vec.zip
+unzip -j Data/wiki-news-300d-1M.vec.zip -d Data/
 ```
 
 Then build the two `.jsonl` files and the databases:
 
 ```bash
 python sentiment/RealDataSetup.py --reviews-gz Data/Software.jsonl.gz \
-                                  --glove      Data/glove.6B.300d.txt \
+                                  --vec        Data/wiki-news-300d-1M.vec \
                                   --per-class  20000 \
                                   --out-dir    Data
 python sentiment/InitDatabases.py --reviews Data/TestData.jsonl --embeddings Data/WordEmbeddings.jsonl
@@ -181,8 +183,8 @@ python sentiment/InitDatabases.py --reviews Data/TestData.jsonl --embeddings Dat
   silently. That was 1.9% of reviews, and not a random 1.9%.
 
 Reviews are kept if they are 15 to 200 words long. The embedding table is restricted to
-the vocabulary the corpus uses (importing all 400,000 GloVe vectors would build a
-multi-gigabyte table). Words with no GloVe vector fall back to a zero vector.
+the vocabulary the corpus uses (importing all 999,994 fastText vectors would build a
+multi-gigabyte table). Words with no vector fall back to a zero vector.
 
 ### Without the real data
 
@@ -220,6 +222,32 @@ every prediction is the same class, the run says so.
 Accuracy within one star is reported alongside exact accuracy. Predicting 4 when the
 truth is 5 is the normal failure mode for exact star prediction, and the two figures
 together say much more than either alone.
+
+## Pretrained weights
+
+Wren 1.0 is exported by `tools/export_model.py` as two portable files in
+`models/wren-1.0/` (they are release assets, not committed; sizes and checksums are in
+`models/wren-1.0/MODEL.md`):
+
+- `wren-1.0-weights.npz`: the filter bank kernels and dense layers.
+- `wren-1.0-embeddings.npz`: the fastText vectors for the 37,498 words Wren can look up.
+
+```bash
+python tools/export_model.py     # needs Data/wiki-news-300d-1M.vec and the trained .db files
+```
+
+The script runs the 2,000 test reviews through both the databases and the exported
+files and stops unless the probabilities agree.
+
+## Licences and credits
+
+- The code in this repository is the project's own.
+- The word vectors are fastText `wiki-news-300d-1M` from Mikolov, Grave, Bojanowski,
+  Puhrsch and Joulin, *Advances in Pre-Training Distributed Word Representations*
+  (LREC 2018), licensed CC BY-SA 3.0. `wren-1.0-embeddings.npz` is a subset of those
+  vectors and is distributed under the same licence.
+- The training reviews are from Amazon Reviews 2023 (McAuley Lab, UCSD), published for
+  research use. Check its terms before using the weights commercially.
 
 ## Verification
 
