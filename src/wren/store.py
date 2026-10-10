@@ -2,6 +2,7 @@
 
 import hashlib
 import os
+import sys
 import urllib.error
 import urllib.request
 
@@ -33,7 +34,7 @@ def _download(name, directory):
     os.makedirs(directory, exist_ok=True)
     target = os.path.join(directory, name)
     partial = target + ".part"
-    print(f"Downloading {name} ...", flush=True)
+    print(f"Downloading {name} ...", file=sys.stderr, flush=True)
     try:
         urllib.request.urlretrieve(RELEASE_URL + name, partial)
     except (urllib.error.URLError, OSError) as e:
