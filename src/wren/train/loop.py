@@ -1,4 +1,4 @@
-"""Trains or runs the sentiment analyser.
+"""Trains a new Wren model. Run it with `wren train`.
 
 Architecture: embeddings -> parallel filter bank branches (Kim 2014 style: several
 region sizes, each a bank of filters sliding along the word axis only, ReLU, global
@@ -12,11 +12,11 @@ import time
 
 import numpy as np
 
-import Comms as com
-import WordVectorConversions as wvc
-from FilterBankLayer import FilterBankLayer
-from InitDatabases import FILTER_BANK_CONFIG
-from NeuralLayer import NeuralLayer
+from . import comms as com
+from ..config import FILTER_BANK_CONFIG, NUM_CLASSES
+from ..layers.filter_bank import FilterBankLayer
+from ..layers.neural import NeuralLayer
+from ..model import forward_pass as _forward_pass
 
 # 0.01 was too low for this depth: the overfit test reached 100% on two random
 # seeds out of three and stalled at 46% on the third. At 0.03 it reaches 100% on
@@ -47,10 +47,6 @@ VALIDATION_EVERY = 200
 # VALIDATION_SIZE since this runs many times per training run.
 QUICK_VALIDATION_SIZE = 300
 
-NUM_CLASSES = 5
-
-SENTIMENT_LABELS = {1: "Very negative", 2: "Negative", 3: "Neutral",
-                    4: "Positive", 5: "Very positive"}
 
 
 def one_hot_ratings(star_ratings):
@@ -61,20 +57,8 @@ def one_hot_ratings(star_ratings):
 
 
 def forward_pass(conv_layers, dense_layers, output_layer, texts):
-    """ Runs a batch of review texts through the whole network.
-
-    Returns the softmax output, shape (len(texts), 5). """
-    conv_input = wvc.pad_matrix(wvc.return_vector_matrix_jsonl(wvc.format_entry_data(texts)))
-    conv_input = np.asarray(conv_input, dtype=float)
-
-    # Parallel filter bank branches over the same embedding input, concatenated into
-    # one feature vector -- not a stacked pipeline like the old two ConvLayers.
-    activations = np.concatenate([layer.convPass(conv_input) for layer in conv_layers], axis=1)
-
-    for layer in dense_layers:
-        activations = layer.batch_layer_output(activations)
-
-    return output_layer.softmax(activations)[1]
+    """ Runs a batch of review texts through the network, reading embeddings from the database. """
+    return _forward_pass(conv_layers, dense_layers, output_layer, texts, com.fetch_embedding)
 
 
 def backward_pass(conv_layers, dense_layers, output_layer, one_hot):
@@ -157,20 +141,20 @@ def training_batches(train_ids, reviews_per_batch, num_batches, seed):
 MODEL_DATABASES = ("neuron_weights.db", "convolution_layers.db")
 
 
-def confirm_and_back_up_model():
+def confirm_and_back_up_model(assume_yes=False):
     """ Confirms before training overwrites the stored model, and keeps a copy.
 
     Training reinitialises every weight and kernel, so starting it destroys whatever
     model was loaded. Rather than warning about that in the README, ask first and
     write a timestamped backup of the databases that are about to be overwritten. """
-    here = os.path.dirname(os.path.abspath(__file__))
+    here = com.DB_DIR
     existing = [name for name in MODEL_DATABASES if os.path.exists(os.path.join(here, name))]
 
     if existing:
         print("\nTraining will overwrite the current weights and kernels in "
               + ", ".join(existing) + ".")
-        answer = input("A timestamped backup will be written first. Continue? [y/N] ")
-        if answer.strip().lower() not in ("y", "yes"):
+        if not assume_yes and input(
+                "A timestamped backup will be written first. Continue? [y/N] ").strip().lower() not in ("y", "yes"):
             print("Cancelled. Nothing was changed.")
             return False
 
@@ -214,138 +198,112 @@ def restore_model(conv_layers, all_layers, snapshot):
         layer.biases = biases
 
 
-def main():
-    mode = int(input("To train a new model, press 1. To test the currently loaded model, press 2.\n"
-                     "To load a model, input valid database files into the current folder titled:\n"
-                     "'convolution_layers', and 'neuron_weights'.\n"
-                     "WARNING: If training a new model, the current neuron weights and kernel files will be overridden.\n"))
-
+def train(reviews_per_batch, num_batches, assume_yes=False):
+    """Trains a new model on the databases in comms.DB_DIR, replacing the stored weights."""
     conv_layers = [FilterBankLayer(layer_num, region_size, num_filters)
                   for layer_num, region_size, num_filters in FILTER_BANK_CONFIG]
     dense_layers = [NeuralLayer(n) for n in range(1, 6)]
     output_layer = NeuralLayer(6)
     all_layers = list(dense_layers) + [output_layer]
 
-    if mode == 1:
-        if not confirm_and_back_up_model():
-            return
+    if not confirm_and_back_up_model(assume_yes):
+        return
 
-        # Override the value matrices with freshly drawn values. If a new model is
-        # not being trained, the currently loaded values are used.
-        for layer in conv_layers:
-            layer.initialize_values()
-        for layer in all_layers:
-            layer.initialise_values()
+    # Override the value matrices with freshly drawn values. If a new model is
+    # not being trained, the currently loaded values are used.
+    for layer in conv_layers:
+        layer.initialize_values()
+    for layer in all_layers:
+        layer.initialise_values()
 
-        reviews_per_batch = int(input("Enter number of reviews per batch: "))
-        num_batches = int(input("Enter number of batches to run: "))
-
-        train_ids, validation_ids = com.split_ids(
-            com.fetch_all_review_ids(), VALIDATION_SIZE, DATA_SEED)
-        print(f"\n{len(train_ids)} training reviews, {len(validation_ids)} held out for validation.")
-        quick_validation_ids = validation_ids[:QUICK_VALIDATION_SIZE]
-    else:
-        input_sentence = [str(input("Enter data to be tested: "))]
+    train_ids, validation_ids = com.split_ids(
+        com.fetch_all_review_ids(), VALIDATION_SIZE, DATA_SEED)
+    print(f"\n{len(train_ids)} training reviews, {len(validation_ids)} held out for validation.")
+    quick_validation_ids = validation_ids[:QUICK_VALIDATION_SIZE]
 
     start = time.time()
 
-    if mode == 1:
-        total_loss = 0.0
-        correct_outputs = 0
-        seen = 0
-        train_predictions = []
-        train_labels = []
-        best_quick_accuracy = -1.0
-        best_snapshot = None
+    total_loss = 0.0
+    correct_outputs = 0
+    seen = 0
+    train_predictions = []
+    train_labels = []
+    best_quick_accuracy = -1.0
+    best_snapshot = None
 
-        # Fetch the currently loaded values once. They are then kept in memory for
-        # the whole run and checkpointed to the database at intervals.
-        for layer in conv_layers:
-            layer.fetchKernel()
+    # Fetch the currently loaded values once. They are then kept in memory for
+    # the whole run and checkpointed to the database at intervals.
+    for layer in conv_layers:
+        layer.fetchKernel()
+    for layer in all_layers:
+        layer.fetch_values()
+
+    for batch_index, batch_ids in enumerate(
+            training_batches(train_ids, reviews_per_batch, num_batches, DATA_SEED)):
+
+        print(f'Batch: {batch_index + 1}')
+
+        # One query for the whole batch, rather than one per review.
+        rows = com.fetch_batch(batch_ids)
+        texts = [row[1] for row in rows]
+        star_ratings = [int(row[0]) for row in rows]
+        one_hot = one_hot_ratings(star_ratings)
+
+        softmax_output = forward_pass(conv_layers, dense_layers, output_layer, texts)
+        predictions = np.argmax(softmax_output, axis=1) + 1
+
+        output_layer.ccel_calculation(one_hot)
+        backward_pass(conv_layers, dense_layers, output_layer, one_hot)
+        total_loss += output_layer.averageLoss
+
+        correct_outputs += int(np.sum(predictions == np.asarray(star_ratings)))
+        seen += len(texts)
+        train_predictions.extend(predictions.tolist())
+        train_labels.extend(star_ratings)
+
+        # Updating values
         for layer in all_layers:
-            layer.fetch_values()
-
-        for batch_index, batch_ids in enumerate(
-                training_batches(train_ids, reviews_per_batch, num_batches, DATA_SEED)):
-
-            print(f'Batch: {batch_index + 1}')
-
-            # One query for the whole batch, rather than one per review.
-            rows = com.fetch_batch(batch_ids)
-            texts = [row[1] for row in rows]
-            star_ratings = [int(row[0]) for row in rows]
-            one_hot = one_hot_ratings(star_ratings)
-
-            softmax_output = forward_pass(conv_layers, dense_layers, output_layer, texts)
-            predictions = np.argmax(softmax_output, axis=1) + 1
-
-            output_layer.ccel_calculation(one_hot)
-            backward_pass(conv_layers, dense_layers, output_layer, one_hot)
-            total_loss += output_layer.averageLoss
-
-            correct_outputs += int(np.sum(predictions == np.asarray(star_ratings)))
-            seen += len(texts)
-            train_predictions.extend(predictions.tolist())
-            train_labels.extend(star_ratings)
-
-            # Updating values
-            for layer in all_layers:
-                layer.adjust_values(LEARNING_RATE)
-            for layer in conv_layers:
-                layer.adjust_kernel_values(LEARNING_RATE)
-
-            if (batch_index + 1) % CHECKPOINT_EVERY == 0:
-                save_parameters(conv_layers, all_layers)
-
-            if (batch_index + 1) % VALIDATION_EVERY == 0:
-                quick_exact, quick_within_one, _, _ = evaluate(
-                    conv_layers, dense_layers, output_layer, quick_validation_ids)
-                print(f"  [batch {batch_index + 1}] quick validation: "
-                     f"{100 * quick_exact:.2f}% exact, {100 * quick_within_one:.2f}% within one")
-                if quick_exact > best_quick_accuracy:
-                    best_quick_accuracy = quick_exact
-                    best_snapshot = snapshot_model(conv_layers, all_layers)
-
-        if best_snapshot is not None:
-            restore_model(conv_layers, all_layers, best_snapshot)
-            print(f"\nRestored best checkpoint seen during training "
-                 f"(quick validation accuracy {100 * best_quick_accuracy:.2f}%).")
-
-        save_parameters(conv_layers, all_layers)
-
-        elapsed = time.time() - start
-        print(f"\nTotal time elapsed: {elapsed:.2f}s")
-
-        print(f"\nTraining (seen during training, not a fair measure)")
-        print(f"  Average loss     : {total_loss / max(num_batches, 1):.4f}")
-        print(f"  Accuracy         : {100 * correct_outputs / max(seen, 1):.2f}%")
-        print(f"  True labels      : {class_distribution(train_labels)}")
-        print(f"  Predictions      : {class_distribution(train_predictions)}")
-
-        exact, within_one, predictions, labels = evaluate(
-            conv_layers, dense_layers, output_layer, validation_ids)
-
-        print(f"\nValidation ({len(labels)} held out reviews, never trained on)")
-        print(f"  Accuracy         : {100 * exact:.2f}%")
-        print(f"  Within one star  : {100 * within_one:.2f}%")
-        print(f"  True labels      : {class_distribution(labels)}")
-        print(f"  Predictions      : {class_distribution(predictions)}")
-
-        if len(set(predictions.tolist())) == 1:
-            print("\n  Warning: every prediction is the same class. The model has "
-                  "collapsed onto one output rather than learning to separate them.")
-    else:
+            layer.adjust_values(LEARNING_RATE)
         for layer in conv_layers:
-            layer.fetchKernel()
-        for layer in all_layers:
-            layer.fetch_values()
+            layer.adjust_kernel_values(LEARNING_RATE)
 
-        softmax_output = forward_pass(conv_layers, dense_layers, output_layer, input_sentence)
-        for prediction in np.argmax(softmax_output, axis=1) + 1:
-            print(SENTIMENT_LABELS[int(prediction)])
+        if (batch_index + 1) % CHECKPOINT_EVERY == 0:
+            save_parameters(conv_layers, all_layers)
 
-        print(f"Total time elapsed: {time.time() - start:.2f}s")
+        if (batch_index + 1) % VALIDATION_EVERY == 0:
+            quick_exact, quick_within_one, _, _ = evaluate(
+                conv_layers, dense_layers, output_layer, quick_validation_ids)
+            print(f"  [batch {batch_index + 1}] quick validation: "
+                 f"{100 * quick_exact:.2f}% exact, {100 * quick_within_one:.2f}% within one")
+            if quick_exact > best_quick_accuracy:
+                best_quick_accuracy = quick_exact
+                best_snapshot = snapshot_model(conv_layers, all_layers)
 
+    if best_snapshot is not None:
+        restore_model(conv_layers, all_layers, best_snapshot)
+        print(f"\nRestored best checkpoint seen during training "
+             f"(quick validation accuracy {100 * best_quick_accuracy:.2f}%).")
 
-if __name__ == "__main__":
-    main()
+    save_parameters(conv_layers, all_layers)
+
+    elapsed = time.time() - start
+    print(f"\nTotal time elapsed: {elapsed:.2f}s")
+
+    print(f"\nTraining (seen during training, not a fair measure)")
+    print(f"  Average loss     : {total_loss / max(num_batches, 1):.4f}")
+    print(f"  Accuracy         : {100 * correct_outputs / max(seen, 1):.2f}%")
+    print(f"  True labels      : {class_distribution(train_labels)}")
+    print(f"  Predictions      : {class_distribution(train_predictions)}")
+
+    exact, within_one, predictions, labels = evaluate(
+        conv_layers, dense_layers, output_layer, validation_ids)
+
+    print(f"\nValidation ({len(labels)} held out reviews, never trained on)")
+    print(f"  Accuracy         : {100 * exact:.2f}%")
+    print(f"  Within one star  : {100 * within_one:.2f}%")
+    print(f"  True labels      : {class_distribution(labels)}")
+    print(f"  Predictions      : {class_distribution(predictions)}")
+
+    if len(set(predictions.tolist())) == 1:
+        print("\n  Warning: every prediction is the same class. The model has "
+              "collapsed onto one output rather than learning to separate them.")

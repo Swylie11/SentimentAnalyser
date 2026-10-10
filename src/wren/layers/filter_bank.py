@@ -1,7 +1,7 @@
 import numpy as np
 from numpy.lib.stride_tricks import sliding_window_view
 
-import Comms as com
+from ..train import comms as com
 
 
 class FilterBankLayer:

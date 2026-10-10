@@ -1,7 +1,7 @@
 """Creates and seeds the SQLite databases the model reads from.
 
-The four .db files are not kept in the repository, so this script builds them.
-It has two modes:
+The four .db files are not kept in the repository, so `wren setup` builds them in
+the work directory. It has two modes:
 
   --synthetic   Builds a small self-contained corpus and embedding table. This
                 exists so the gradient check and the overfit test can be run on
@@ -10,14 +10,13 @@ It has two modes:
 
   --embeddings / --reviews
                 Imports the real data from the .jsonl files produced by
-                WordEmbeddingsSetup.py and TestDataSetup.py.
+                real_data_setup.py.
 
 The dense stack's input width is one feature per filter bank filter, summed across
 every branch in FILTER_BANK_CONFIG -- global max-pooling makes this independent of
 review length, so it is computed directly rather than measured with a dummy pass.
 """
 
-import argparse
 import json
 import os
 import random
@@ -25,25 +24,16 @@ import sqlite3
 
 import numpy as np
 
-HERE = os.path.dirname(os.path.abspath(__file__))
+from . import comms
+from ..config import FILTER_BANK_CONFIG, NUM_CLASSES
 
-CONV_DB = os.path.join(HERE, "convolution_layers.db")
-WEIGHTS_DB = os.path.join(HERE, "neuron_weights.db")
-EMBEDDINGS_DB = os.path.join(HERE, "word_embeddings.db")
-TEST_DATA_DB = os.path.join(HERE, "test_data.db")
 
-# Parallel filter bank branches, Kim (2014) style: (LayerNum, region_size, num_filters).
-# Each branch slides its filters along the word axis only (kernel width is always the
-# full embedding dimension) and globally max-pools over word position, so branches run
-# in parallel over the same embedding input rather than stacking like the old
-# ConvLayer pair did. See FilterBankLayer.py.
-FILTER_BANK_CONFIG = [(1, 3, 100), (2, 4, 100), (3, 5, 100)]
+def _db(name):
+    return os.path.join(comms.DB_DIR, name)
 
 # Widths of the dense stack after the flatten. The input width is measured, and
 # the final 5 is the number of star ratings.
 HIDDEN_WIDTHS = [256, 128, 64, 32, 16]
-NUM_CLASSES = 5
-
 EMBEDDING_DIM = 300
 MAX_WORDS = 200
 
@@ -56,17 +46,17 @@ def create_schemas():
     bias) predates FilterBankLayer, so it is dropped and recreated with a bias column
     rather than migrated in place.
     """
-    with sqlite3.connect(CONV_DB) as conn:
+    with sqlite3.connect(_db("convolution_layers.db")) as conn:
         conn.execute("DROP TABLE IF EXISTS kernels")
         conn.execute("CREATE TABLE kernels (LayerNum INTEGER PRIMARY KEY, kernel TEXT, bias TEXT)")
 
-    with sqlite3.connect(WEIGHTS_DB) as conn:
+    with sqlite3.connect(_db("neuron_weights.db")) as conn:
         conn.execute("CREATE TABLE IF NOT EXISTS weights (LayerNum INTEGER PRIMARY KEY, weights TEXT, biases TEXT)")
 
-    with sqlite3.connect(EMBEDDINGS_DB) as conn:
+    with sqlite3.connect(_db("word_embeddings.db")) as conn:
         conn.execute("CREATE TABLE IF NOT EXISTS embeddings (word TEXT PRIMARY KEY, embedding TEXT)")
 
-    with sqlite3.connect(TEST_DATA_DB) as conn:
+    with sqlite3.connect(_db("test_data.db")) as conn:
         conn.execute("""CREATE TABLE IF NOT EXISTS test_dataset4
                         (id INTEGER PRIMARY KEY AUTOINCREMENT, review_id INTEGER, rating INTEGER, text TEXT)""")
 
@@ -74,7 +64,7 @@ def create_schemas():
 def seed_kernels():
     """Writes placeholder kernels and biases so FilterBankLayer.fetchKernel has a
     shape to read."""
-    with sqlite3.connect(CONV_DB) as conn:
+    with sqlite3.connect(_db("convolution_layers.db")) as conn:
         for layer_num, region_size, num_filters in FILTER_BANK_CONFIG:
             kernel = np.zeros((num_filters, region_size, EMBEDDING_DIM)).tolist()
             bias = np.zeros(num_filters).tolist()
@@ -92,7 +82,7 @@ def flattened_width():
 def sanity_check_filter_banks():
     """Runs one forward pass per branch on a dummy all-zero review, purely to catch
     config typos (e.g. a region size larger than MAX_WORDS) before a real run."""
-    from FilterBankLayer import FilterBankLayer
+    from ..layers.filter_bank import FilterBankLayer
 
     dummy = np.zeros((1, MAX_WORDS, EMBEDDING_DIM))
     for layer_num, region_size, num_filters in FILTER_BANK_CONFIG:
@@ -114,7 +104,7 @@ def seed_layers(input_width):
     """
     widths = [input_width] + HIDDEN_WIDTHS + [NUM_CLASSES]
 
-    with sqlite3.connect(WEIGHTS_DB) as conn:
+    with sqlite3.connect(_db("neuron_weights.db")) as conn:
         for layer_num in range(1, len(widths)):
             n_in = widths[layer_num - 1]
             n_out = widths[layer_num]
@@ -140,7 +130,7 @@ def import_embeddings(path):
                 continue
             rows.append((record["word"], str(record["vector"])))
 
-    with sqlite3.connect(EMBEDDINGS_DB) as conn:
+    with sqlite3.connect(_db("word_embeddings.db")) as conn:
         # Clear first, as import_reviews does. Without this, an earlier --synthetic
         # run leaves its random vectors behind for any word the real file does not
         # also contain, and the model silently reads noise for those words.
@@ -161,7 +151,7 @@ def import_reviews(path):
                 continue
             rows.append((review_id, int(record["rating"]), str(record["text"])))
 
-    with sqlite3.connect(TEST_DATA_DB) as conn:
+    with sqlite3.connect(_db("test_data.db")) as conn:
         conn.execute("DELETE FROM test_dataset4")
         conn.executemany("INSERT INTO test_dataset4 (review_id, rating, text) VALUES (?, ?, ?)", rows)
 
@@ -197,7 +187,7 @@ def seed_synthetic(num_reviews, seed):
         vector = np_rng.normal(0.0, 1.0, EMBEDDING_DIM).round(6).tolist()
         embedding_rows.append((word, str(vector)))
 
-    with sqlite3.connect(EMBEDDINGS_DB) as conn:
+    with sqlite3.connect(_db("word_embeddings.db")) as conn:
         conn.execute("DELETE FROM embeddings")
         conn.executemany("INSERT INTO embeddings (word, embedding) VALUES (?, ?)", embedding_rows)
 
@@ -213,7 +203,7 @@ def seed_synthetic(num_reviews, seed):
 
     rng.shuffle(review_rows)
     # review_id stays the shuffled row's own identifier; id is assigned in insert order.
-    with sqlite3.connect(TEST_DATA_DB) as conn:
+    with sqlite3.connect(_db("test_data.db")) as conn:
         conn.execute("DELETE FROM test_dataset4")
         conn.execute("DELETE FROM sqlite_sequence WHERE name = 'test_dataset4'")
         conn.executemany("INSERT INTO test_dataset4 (review_id, rating, text) VALUES (?, ?, ?)", review_rows)
@@ -221,32 +211,19 @@ def seed_synthetic(num_reviews, seed):
     print(f"Seeded {len(review_rows)} synthetic reviews and {len(embedding_rows)} embeddings (seed={seed})")
 
 
-def main():
-    parser = argparse.ArgumentParser(description=__doc__,
-                                     formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--synthetic", type=int, metavar="N",
-                        help="Seed N synthetic reviews instead of importing real data")
-    parser.add_argument("--seed", type=int, default=0, help="Random seed for --synthetic")
-    parser.add_argument("--embeddings", metavar="JSONL",
-                        help="Path to the word embeddings .jsonl file")
-    parser.add_argument("--reviews", metavar="JSONL",
-                        help="Path to the review .jsonl file")
-    args = parser.parse_args()
-
+def setup(synthetic=None, seed=0, embeddings=None, reviews=None):
+    """Builds the databases in comms.DB_DIR. Called by `wren setup`."""
+    os.makedirs(comms.DB_DIR, exist_ok=True)
     create_schemas()
     seed_kernels()
     sanity_check_filter_banks()
 
-    if args.embeddings:
-        import_embeddings(args.embeddings)
-    if args.reviews:
-        import_reviews(args.reviews)
-    if args.synthetic:
-        seed_synthetic(args.synthetic, args.seed)
+    if embeddings:
+        import_embeddings(embeddings)
+    if reviews:
+        import_reviews(reviews)
+    if synthetic:
+        seed_synthetic(synthetic, seed)
 
     seed_layers(flattened_width())
-    print("Databases ready.")
-
-
-if __name__ == "__main__":
-    main()
+    print(f"Databases ready in {comms.DB_DIR}")

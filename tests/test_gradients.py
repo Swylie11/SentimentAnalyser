@@ -19,9 +19,7 @@ import sys
 
 import numpy as np
 
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "sentiment"))
-
-from NeuralLayer import NeuralLayer  # noqa: E402
+from wren.layers.neural import NeuralLayer
 
 # A wrong gradient shows up as a relative error many orders of magnitude above this.
 # Central differences at eps=1e-5 in float64 bottom out around 1e-9.

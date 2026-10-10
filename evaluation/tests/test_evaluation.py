@@ -1,6 +1,6 @@
 """Checks for build_test_set.py and evaluate.py. Needs no real data and never
 touches the real databases: the end-to-end check builds a synthetic model in a
-temporary copy of sentiment/.
+temporary work directory.
 
     python evaluation/tests/test_evaluation.py
 """
@@ -84,12 +84,9 @@ def test_end_to_end():
     with tempfile.TemporaryDirectory() as tmp:
         model_dir = os.path.join(tmp, "sentiment")
         os.makedirs(model_dir)
-        for name in os.listdir(os.path.join(REPO, "sentiment")):
-            if name.endswith(".py"):
-                shutil.copy(os.path.join(REPO, "sentiment", name), model_dir)
 
         run = lambda *a: subprocess.run([sys.executable, *a], cwd=tmp, capture_output=True, text=True)
-        built = run(os.path.join(model_dir, "InitDatabases.py"), "--synthetic", "300")
+        built = run("-m", "wren.cli", "setup", "--workdir", model_dir, "--synthetic", "300")
         check("synthetic model builds", built.returncode == 0)
 
         # A test set drawn from the synthetic vocabulary.

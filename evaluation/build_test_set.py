@@ -82,9 +82,8 @@ def main():
     args = parser.parse_args()
 
     # Imported here, not at module level, so evaluate.py can import normalise()
-    # without pulling the real sentiment/ modules in ahead of its own --model-dir.
-    sys.path.insert(0, os.path.join(REPO, "sentiment"))
-    import RealDataSetup as rds
+    # without loading the training code.
+    from wren.train import real_data_setup as rds
 
     known = known_texts(args.db)
     print(f"{len(known):,} distinct training reviews will be excluded.")

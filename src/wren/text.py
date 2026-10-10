@@ -1,12 +1,5 @@
 import string
 import numpy as np
-import Comms as com
-
-
-def get_vector2(target):
-    return com.fetch_embedding(target)
-
-
 def get_embedding(line):
     """ Takes the line from the word embeddings file and outputs the values as a list """
     values = line.strip().split()
@@ -46,15 +39,15 @@ def format_entry_data(batch_input):
     return output_batch
 
 
-def return_vector_matrix_jsonl(list_input):
-    """ Fetches the embeddings from a jsonl file """
+def return_vector_matrix_jsonl(list_input, lookup):
+    """ Looks up the embedding of every word. `lookup(word)` returns a 300 vector, zeros if unknown. """
     output_tensor = []
     for i in range(len(list_input)):
         temp_matrix = []
         sentence = list_input[i]
         words = sentence.strip().split()
         for n in range(len(words)):
-            temp_matrix.append(get_vector2(words[n]))
+            temp_matrix.append(lookup(words[n]))
         output_tensor.append(temp_matrix)
     return output_tensor
 

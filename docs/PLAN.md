@@ -1,5 +1,7 @@
 # Plan: make Wren installable (CLI + Python library)
 
+**Status 2026-10-10:** Phases 1 to 4 are implemented and uncommitted, except the GitHub Release (upload the two `.npz` files as assets of tag `v1.0`; `src/wren/store.py` downloads from there) and a `LICENSE` file. Phase 1.4 result: restricting to the 37.5k training vocabulary scored 47.15% exact on the eval set, against 47.0% with the eval words included, so the restriction costs nothing measurable. Decisions taken: download on first use; training stays in the package (`wren train`, `wren setup`).
+
 Goal: `pip install` then either `wren predict "text"` or
 `from wren import Analyser; Analyser().predict("text")`, on a machine that has none of
 this repo's local files.

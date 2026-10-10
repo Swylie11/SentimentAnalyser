@@ -15,3 +15,6 @@ Data/
 
 # Model artifacts are distributed as release assets, not committed.
 models/*/*.npz
+wren-work/
+build/
+*.egg-info/

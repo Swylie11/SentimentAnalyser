@@ -1,5 +1,5 @@
 import numpy as np
-import Comms as com
+from ..train import comms as com
 
 
 class NeuralLayer:

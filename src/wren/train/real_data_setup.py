@@ -1,4 +1,4 @@
-"""Builds the two .jsonl files InitDatabases.py imports, from real source data.
+"""Builds the two .jsonl files `wren setup` imports, from real source data.
 
 This replaces the hardcoded-path scripts (TestDataSetup.py, WordEmbeddingsSetup.py)
 for the Amazon Reviews 2023 dump and the fastText wiki-news-300d-1M embeddings file. It differs from them
@@ -26,7 +26,7 @@ would never read most of. Words absent from fastText keep the existing behaviour
 Comms.fetch_embedding returns a zero vector for them.
 
 Usage:
-    python RealDataSetup.py --reviews-gz  ../../Data/Software.jsonl.gz \
+    python -m wren.train.real_data_setup --reviews-gz  ../../Data/Software.jsonl.gz \
                             --vec         ../../Data/wiki-news-300d-1M.vec \
                             --per-class   1000 \
                             --out-dir     ../../Data
@@ -40,7 +40,7 @@ import random
 import re
 import sys
 
-import WordVectorConversions as wvc
+from .. import text as wvc
 
 # Matches the word-count window the model is built around: MAX_WORDS is 200, and
 # reviews shorter than 15 words carry too little signal to be worth a row.
@@ -228,7 +228,7 @@ def main():
     write_embeddings(args.vec, vocab, embeddings_out)
 
     print("\nNext:")
-    print(f"  python InitDatabases.py --reviews {reviews_out} --embeddings {embeddings_out}")
+    print(f"  wren setup --reviews {reviews_out} --embeddings {embeddings_out}")
 
 
 if __name__ == "__main__":

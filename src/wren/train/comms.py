@@ -18,13 +18,28 @@ _connections = {}
 _embedding_cache = {}
 
 
+# Directory holding the four training databases. `wren train --workdir` and
+# `wren setup --workdir` set this; the default is ./wren-work, or $WREN_WORKDIR.
+DB_DIR = os.path.abspath(os.environ.get("WREN_WORKDIR", "wren-work"))
+
+
+def set_db_dir(path):
+    """Points every later database call at `path` and drops cached connections."""
+    global DB_DIR
+    DB_DIR = os.path.abspath(path)
+    for conn in _connections.values():
+        conn.close()
+    _connections.clear()
+    _embedding_cache.clear()
+
+
 def connect(db_name):
-    """Returns a cached connection to a database file next to this module."""
+    """Returns a cached connection to a database file in DB_DIR."""
     if db_name not in _connections:
-        db_path = os.path.join(os.path.dirname(__file__), db_name)
+        db_path = os.path.join(DB_DIR, db_name)
         if not os.path.exists(db_path):
             raise FileNotFoundError(
-                f"Database not found: {db_path}. Run InitDatabases.py to create it.")
+                f"Database not found: {db_path}. Run `wren setup` to create it.")
         _connections[db_name] = sqlite3.connect(db_path)
     return _connections[db_name]
 
@@ -82,7 +97,7 @@ def fetch_kernel(LayerNum):
         "SELECT kernel, bias FROM kernels WHERE LayerNum = ?", (LayerNum,)).fetchone()
 
     if row is None:
-        raise LookupError(f"No kernel row for LayerNum={LayerNum}. Run InitDatabases.py.")
+        raise LookupError(f"No kernel row for LayerNum={LayerNum}. Run `wren setup`.")
     return ast.literal_eval(row[0]), ast.literal_eval(row[1])
 
 
@@ -92,7 +107,7 @@ def fetch_layer(LayerNum):
         "SELECT weights, biases FROM weights WHERE LayerNum = ?", (LayerNum,)).fetchone()
 
     if row is None:
-        raise LookupError(f"No weights row for LayerNum={LayerNum}. Run InitDatabases.py.")
+        raise LookupError(f"No weights row for LayerNum={LayerNum}. Run `wren setup`.")
     return [ast.literal_eval(row[0]), ast.literal_eval(row[1])]
 
 

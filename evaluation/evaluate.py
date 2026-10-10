@@ -157,14 +157,14 @@ def file_fingerprint(directory):
 
 
 def load_model(model_dir):
-    """Imports the model code from model_dir and loads the stored weights."""
-    sys.path.insert(0, model_dir)
-    import Comms as com
-    import main as model
-    import WordVectorConversions as wvc
-    from FilterBankLayer import FilterBankLayer
-    from InitDatabases import FILTER_BANK_CONFIG
-    from NeuralLayer import NeuralLayer
+    """Loads the stored weights from the databases in model_dir (the work directory)."""
+    from wren import text as wvc
+    from wren.config import FILTER_BANK_CONFIG
+    from wren.layers.filter_bank import FilterBankLayer
+    from wren.layers.neural import NeuralLayer
+    from wren.train import comms as com
+    from wren.train import loop as model
+    com.set_db_dir(model_dir)
 
     conv = [FilterBankLayer(n, r, f) for n, r, f in FILTER_BANK_CONFIG]
     dense = [NeuralLayer(n) for n in range(1, 6)]
@@ -233,7 +233,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--model-dir", default=os.path.join(REPO, "sentiment"),
-                        help="Directory holding the model code and the four .db files")
+                        help="Work directory holding the four .db files")
     parser.add_argument("--test-set", default=os.path.join(REPO, "Data", "eval_test.jsonl"))
     parser.add_argument("--train-slice", type=int, default=2000,
                         help="Training reviews to score for the train/test gap")

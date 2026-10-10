@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "wren-sentiment"
+version = "1.0.0"
+description = "Five-class (1 to 5 star) review sentiment analyser: a text CNN written from scratch in NumPy."
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = ["numpy>=1.24"]
+
+[project.scripts]
+wren = "wren.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]

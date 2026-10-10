@@ -126,18 +126,42 @@ which was the bottleneck, and most of every input was padding), the amount of da
 training reviews to 98,000), and normalising curly apostrophes so words like `don’t`
 reach the embedding table. Regularisation has not been tried yet.
 
-## Setup
+## Install and use
 
 ```bash
 python -m venv .venv
 .venv\Scripts\activate            # or: source .venv/bin/activate
-pip install -r requirements.txt   # numpy, scipy
+pip install .                      # numpy is the only dependency; use -e . to develop
 ```
 
-The four SQLite databases are not in the repository and must be built (or created
-from the Wren 1.0 files; see Pretrained weights below). They live in `sentiment/`:
-`test_data.db` (the reviews), `word_embeddings.db`, `neuron_weights.db` and
-`convolution_layers.db` (the trained parameters).
+The Wren 1.0 files (about 31 MB, see Pretrained weights below) are downloaded on first
+use into `~/.cache/wren`, or `$WREN_HOME` if set. `wren fetch` downloads them up front.
+
+```bash
+wren predict "Does exactly what it says, works great"   # 5   Very positive
+wren predict "waste of money" --proba             # stars, then P(1*) ... P(5*)
+cat reviews.txt | wren predict - --json           # one review per line, JSON out
+wren eval --data Data/eval_test.jsonl             # exact and within-one accuracy
+```
+
+```python
+from wren import Analyser
+
+wren = Analyser()
+wren.predict("Does exactly what it says, works great")   # 5
+wren.predict(["great", "awful"])                  # [5, 1]
+wren.predict_proba("it is fine")                  # array of shape (1, 5)
+wren.label(5)                                     # "Very positive"
+```
+
+Words the model has no vector for are read as zeros, and reviews are cut to 200 words.
+
+## Training your own model
+
+Training uses four SQLite databases in a work directory (`./wren-work`, or `--workdir`,
+or `$WREN_WORKDIR`): `test_data.db` (the reviews), `word_embeddings.db`,
+`neuron_weights.db` and `convolution_layers.db` (the parameters). They are not in the
+repository and are built by `wren setup`.
 
 ### With the real data
 
@@ -163,14 +187,14 @@ unzip -j Data/wiki-news-300d-1M.vec.zip -d Data/
 Then build the two `.jsonl` files and the databases:
 
 ```bash
-python sentiment/RealDataSetup.py --reviews-gz Data/Software.jsonl.gz \
+python -m wren.train.real_data_setup --reviews-gz Data/Software.jsonl.gz \
                                   --vec        Data/wiki-news-300d-1M.vec \
                                   --per-class  20000 \
                                   --out-dir    Data
-python sentiment/InitDatabases.py --reviews Data/TestData.jsonl --embeddings Data/WordEmbeddings.jsonl
+wren setup --reviews Data/TestData.jsonl --embeddings Data/WordEmbeddings.jsonl
 ```
 
-`RealDataSetup.py` is built to give an honest figure:
+`real_data_setup.py` is built to give an honest figure:
 
 - **Classes are balanced.** Raw Amazon ratings are very skewed: in the Software
   category, 1.24 million reviews in the length window are 5 star against 155 thousand
@@ -193,24 +217,23 @@ generated instead. Each star rating draws from its own word pool, so the task is
 learnable and the classes are balanced:
 
 ```bash
-python sentiment/InitDatabases.py --synthetic 3000
+wren setup --synthetic 3000
 ```
 
 This tells you nothing about real sentiment. It exists so the tests can run on a
 machine without the Amazon dump.
 
-## Running
+### Training
 
 ```bash
-python sentiment/main.py
+wren train --batches 15000 --batch-size 32       # add --yes to skip the confirmation
 ```
 
-Press `1` to train a new model or `2` to classify a single sentence with the currently
-loaded one.
-
 Training reinitialises every weight and kernel, so it destroys whatever model was
-loaded. It asks for confirmation first and writes a timestamped backup of
-`neuron_weights.db` and `convolution_layers.db` before touching them.
+loaded in the work directory. It asks for confirmation first and writes a timestamped
+backup of `neuron_weights.db` and `convolution_layers.db` before touching them. A
+trained model lives in those databases; to use it with `Analyser` it has to be exported
+with `tools/export_model.py` (see Pretrained weights).
 
 Training reports loss, accuracy and the class distribution of the true labels and of
 the model's predictions, on the training data and on a held-out validation set of up to
@@ -233,7 +256,8 @@ Wren 1.0 is exported by `tools/export_model.py` as two portable files in
 - `wren-1.0-embeddings.npz`: the fastText vectors for the 37,498 words Wren can look up.
 
 ```bash
-python tools/export_model.py     # needs Data/wiki-news-300d-1M.vec and the trained .db files
+python tools/export_model.py --sentiment-dir <work dir with the trained .db files>
+                                 # also needs Data/wiki-news-300d-1M.vec
 ```
 
 The script runs the 2,000 test reviews through both the databases and the exported
@@ -258,6 +282,7 @@ database or any data.
 ```bash
 python tests/test_gradients.py              # dense stack
 python tests/test_filterbank_gradients.py   # filter bank layers
+python tests/test_predict.py                # Analyser on the shipped Wren 1.0 files
 ```
 
 Each compares every analytic gradient against a central finite difference of the loss:
@@ -279,6 +304,7 @@ The end-to-end counterpart needs the databases. A correctly wired network with n
 regularisation must be able to memorise a small sample outright:
 
 ```bash
+wren setup --synthetic 400                              # first, in a scratch work directory
 python tests/test_overfit.py                            # 200 reviews, 60 epochs
 python tests/test_overfit.py --reviews 40 --epochs 40   # quicker
 ```
@@ -301,9 +327,11 @@ python evaluation/tests/test_evaluation.py     # quick checks, no real data
 ## Repository layout
 
 ```
-sentiment/    the model: filter bank and dense layers, embeddings, training loop,
-              database setup, data builder
-tests/        gradient checks and the overfit test
+src/wren/      the package: Analyser (model.py), the CLI (cli.py), text cleaning,
+              layers/, and train/ (training loop, database setup, data builder)
+tools/        export_model.py: databases -> the portable Wren 1.0 files
+docs/         PLAN.md, the packaging plan
+tests/        gradient checks, the overfit test, and prediction checks
 evaluation/   fresh test set builder, evaluation script, logs of the training runs
 ```
 

@@ -12,7 +12,7 @@ not read.
 After writing, the script runs the eval reviews through both the databases and the new
 files and fails unless the probabilities agree. Run from the repo root:
 
-    python tools/export_model.py
+    python tools/export_model.py [--sentiment-dir DIR_WITH_THE_DB_FILES]
 """
 
 import argparse
@@ -25,17 +25,15 @@ import sys
 
 import numpy as np
 
+from wren import Analyser
+from wren import text as wvc
+from wren.config import FILTER_BANK_CONFIG, NUM_DENSE
+from wren.layers.filter_bank import FilterBankLayer
+from wren.layers.neural import NeuralLayer
+from wren.train import comms as com
+from wren.train import loop as model
+
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, os.path.join(REPO, "sentiment"))
-
-import Comms as com  # noqa: E402
-import main as model  # noqa: E402
-import WordVectorConversions as wvc  # noqa: E402
-from FilterBankLayer import FilterBankLayer  # noqa: E402
-from InitDatabases import FILTER_BANK_CONFIG  # noqa: E402
-from NeuralLayer import NeuralLayer  # noqa: E402
-
-NUM_DENSE = 6  # five hidden layers plus the output layer
 
 
 def read_only(path):
@@ -77,7 +75,6 @@ def export_embeddings(vec_path, vocab, out_path):
     np.savez_compressed(out_path, words=np.array(words), vectors=vectors)
     print(f"embeddings: {len(words):,}/{len(vocab):,} vocabulary tokens found in {os.path.basename(vec_path)}"
           f" (the rest stay zero vectors); max float32 error {worst:.1e}")
-    return dict(zip(words, vectors))
 
 
 def export_weights(sentiment_dir, out_path):
@@ -109,39 +106,16 @@ def layers_from_database():
     return conv, dense[:-1], dense[-1]
 
 
-def layers_from_npz(weights_path):
-    weights = np.load(weights_path)
-    conv = [FilterBankLayer(n, r, f) for n, r, f in FILTER_BANK_CONFIG]
-    dense = [NeuralLayer(n) for n in range(1, NUM_DENSE + 1)]
-    for layer in conv:
-        layer.kernel = weights[f"conv{layer.layerNum}_kernel"]
-        layer.bias = weights[f"conv{layer.layerNum}_bias"]
-    for layer in dense:
-        layer.weights = weights[f"dense{layer.layerNum}_weights"]
-        layer.biases = weights[f"dense{layer.layerNum}_biases"]
-    return conv, dense[:-1], dense[-1]
+def database_probabilities(texts):
+    layers = layers_from_database()
+    return np.concatenate([model.forward_pass(*layers, texts[i:i + 50]) for i in range(0, len(texts), 50)])
 
 
-def probabilities(layers, texts):
-    out = []
-    for start in range(0, len(texts), model.EVALUATION_CHUNK):
-        out.append(model.forward_pass(*layers, texts[start:start + model.EVALUATION_CHUNK]))
-    return np.concatenate(out)
-
-
-def verify(weights_path, embeddings, texts, labels):
-    """Same reviews through the databases and through the npz files; the outputs must match."""
-    reference = probabilities(layers_from_database(), texts)
-
-    # Swap the embedding lookup for the npz table (zero vector for unknown words, as
-    # Comms.fetch_embedding does) so nothing is silently read from word_embeddings.db.
-    zero = np.zeros(wvc.EMBEDDING_DIM).tolist()
-    original = com.fetch_embedding
-    com.fetch_embedding = lambda word: embeddings[word].tolist() if word in embeddings else zero
-    try:
-        exported = probabilities(layers_from_npz(weights_path), texts)
-    finally:
-        com.fetch_embedding = original
+def verify(weights_path, embeddings_path, texts, labels):
+    """Same reviews through the databases and through the exported files (via the shipped
+    Analyser, which never touches a database); the outputs must match."""
+    reference = database_probabilities(texts)
+    exported = Analyser(weights_path, embeddings_path).predict_proba(texts)
 
     worst = float(np.abs(reference - exported).max())
     labels = np.asarray(labels)
@@ -169,6 +143,7 @@ def main():
     p.add_argument("--check", type=int, default=2000, help="eval reviews to verify on (0 skips)")
     args = p.parse_args()
 
+    com.set_db_dir(args.sentiment_dir)
     eval_texts, eval_labels = read_eval(args.eval)
     with read_only(os.path.join(args.sentiment_dir, "test_data.db")) as conn:
         train_texts = [row[0] for row in conn.execute("SELECT text FROM test_dataset4")]
@@ -178,11 +153,11 @@ def main():
     os.makedirs(args.out, exist_ok=True)
     weights_path = os.path.join(args.out, "wren-1.0-weights.npz")
     embeddings_path = os.path.join(args.out, "wren-1.0-embeddings.npz")
-    embeddings = export_embeddings(args.vec, vocab, embeddings_path)
+    export_embeddings(args.vec, vocab, embeddings_path)
     export_weights(args.sentiment_dir, weights_path)
 
     if args.check:
-        verify(weights_path, embeddings, eval_texts[:args.check], eval_labels[:args.check])
+        verify(weights_path, embeddings_path, eval_texts[:args.check], eval_labels[:args.check])
 
     for path in (weights_path, embeddings_path):
         print(f"{os.path.basename(path)}  {os.path.getsize(path):,} bytes  sha256 {sha256(path)}")

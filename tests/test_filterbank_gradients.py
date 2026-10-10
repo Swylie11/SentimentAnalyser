@@ -18,9 +18,7 @@ import sys
 
 import numpy as np
 
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "sentiment"))
-
-from FilterBankLayer import FilterBankLayer  # noqa: E402
+from wren.layers.filter_bank import FilterBankLayer
 
 TOLERANCE = 1e-5
 EPSILON = 1e-6

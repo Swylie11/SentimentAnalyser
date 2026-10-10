@@ -10,7 +10,7 @@ actually descend its loss.
 
 Unlike the gradient checks, this one needs the databases. Build them first:
 
-    python InitDatabases.py --synthetic 400
+    wren setup --synthetic 400
 
 Then run:
 
@@ -25,13 +25,11 @@ import time
 
 import numpy as np
 
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "sentiment"))
-
-import Comms as com  # noqa: E402
-import WordVectorConversions as wvc  # noqa: E402
-from FilterBankLayer import FilterBankLayer  # noqa: E402
-from InitDatabases import FILTER_BANK_CONFIG  # noqa: E402
-from NeuralLayer import NeuralLayer  # noqa: E402
+from wren import text as wvc
+from wren.config import FILTER_BANK_CONFIG
+from wren.layers.filter_bank import FilterBankLayer
+from wren.layers.neural import NeuralLayer
+from wren.train import comms as com
 
 NUM_CLASSES = 5
 
@@ -106,7 +104,7 @@ def run_overfit(num_reviews, epochs, batch_size, learning_rate, seed=0, quiet=Fa
     if len(review_ids) < num_reviews:
         raise AssertionError(
             f"only {len(review_ids)} reviews in the database, needed {num_reviews}. "
-            "Run InitDatabases.py with a larger --synthetic count, or import real data.")
+            "Run `wren setup` with a larger --synthetic count, or import real data.")
 
     rows = com.fetch_batch(review_ids)
     texts = [row[1] for row in rows]
@@ -114,7 +112,7 @@ def run_overfit(num_reviews, epochs, batch_size, learning_rate, seed=0, quiet=Fa
 
     # Embed once. The embeddings are fixed, only the network is trained.
     embeddings = np.asarray(
-        wvc.pad_matrix(wvc.return_vector_matrix_jsonl(wvc.format_entry_data(texts))),
+        wvc.pad_matrix(wvc.return_vector_matrix_jsonl(wvc.format_entry_data(texts), com.fetch_embedding)),
         dtype=float)
 
     one_hot = np.zeros((num_reviews, NUM_CLASSES))
