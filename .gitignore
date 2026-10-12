@@ -18,3 +18,4 @@ models/*/*.npz
 wren-work/
 build/
 *.egg-info/
+charts/
