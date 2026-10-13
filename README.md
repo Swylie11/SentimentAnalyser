@@ -49,6 +49,8 @@ exactly what it is and what it is not.
 ### Install
 
 ```bash
+git clone https://github.com/Swylie11/SentimentAnalyser.git
+cd SentimentAnalyser               # pip install . must run from the folder holding pyproject.toml
 python -m venv .venv
 .venv\Scripts\activate             # Windows
 source .venv/bin/activate          # macOS / Linux
