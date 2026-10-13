@@ -12,11 +12,11 @@ from .layers.neural import NeuralLayer
 CHUNK = 50
 
 
-def forward_pass(conv_layers, dense_layers, output_layer, texts, lookup):
+def forward_pass(conv_layers, dense_layers, output_layer, texts, lookup, training=False):
     """ Runs a batch of review texts through the whole network.
 
     `lookup(word)` returns the word's 300 vector. Returns the softmax output,
-    shape (len(texts), 5). """
+    shape (len(texts), 5). `training` applies dropout to the dense layers. """
     conv_input = text.pad_matrix(text.return_vector_matrix_jsonl(text.format_entry_data(texts), lookup))
     conv_input = np.asarray(conv_input, dtype=float)
 
@@ -25,7 +25,10 @@ def forward_pass(conv_layers, dense_layers, output_layer, texts, lookup):
     activations = np.concatenate([layer.convPass(conv_input) for layer in conv_layers], axis=1)
 
     for layer in dense_layers:
-        activations = layer.batch_layer_output(activations)
+        if training:
+            activations = layer.batch_layer_output_masked(activations)
+        else:
+            activations = layer.batch_layer_output(activations)
 
     return output_layer.softmax(activations)[1]
 

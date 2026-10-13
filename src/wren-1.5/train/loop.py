@@ -56,9 +56,9 @@ def one_hot_ratings(star_ratings):
     return encoded
 
 
-def forward_pass(conv_layers, dense_layers, output_layer, texts):
+def forward_pass(conv_layers, dense_layers, output_layer, texts, training=False):
     """ Runs a batch of review texts through the network, reading embeddings from the database. """
-    return _forward_pass(conv_layers, dense_layers, output_layer, texts, com.fetch_embedding)
+    return _forward_pass(conv_layers, dense_layers, output_layer, texts, com.fetch_embedding, training)
 
 
 def backward_pass(conv_layers, dense_layers, output_layer, one_hot):
@@ -66,10 +66,13 @@ def backward_pass(conv_layers, dense_layers, output_layer, one_hot):
 
     Each calculate_derivatives call returns the gradient with respect to that
     layer's inputs, which is the gradient of the layer below's output, so it has to
-    be carried down the stack rather than discarded. """
+    be carried down the stack rather than discarded.
+
+    Assumes the forward pass ran with training=True, so each dense layer holds the
+    dropout mask it applied. """
     gradient = output_layer.calculate_derivatives(output_layer.combined_derivative(one_hot))
     for layer in reversed(dense_layers):
-        gradient = layer.calculate_derivatives(layer.relu_backward(gradient))
+        gradient = layer.calculate_derivatives(layer.droput_relu_backward(gradient))
 
     # Split the concatenated gradient back into each branch's slice of features, in
     # the same order forward_pass concatenated them in. Embeddings are not currently
@@ -249,7 +252,7 @@ def train(reviews_per_batch, num_batches, assume_yes=False):
         star_ratings = [int(row[0]) for row in rows]
         one_hot = one_hot_ratings(star_ratings)
 
-        softmax_output = forward_pass(conv_layers, dense_layers, output_layer, texts)
+        softmax_output = forward_pass(conv_layers, dense_layers, output_layer, texts, training=True)
         predictions = np.argmax(softmax_output, axis=1) + 1
 
         output_layer.ccel_calculation(one_hot)
