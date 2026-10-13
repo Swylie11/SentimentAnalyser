@@ -52,7 +52,7 @@ def train(args):
     from .train import comms, loop
     if args.workdir:
         comms.set_db_dir(args.workdir)
-    loop.train(args.batch_size, args.batches, args.yes)
+    loop.train(args.batch_size, args.batches, args.yes, args.seeds)
 
 
 def main(argv=None):
@@ -85,6 +85,8 @@ def main(argv=None):
     p.add_argument("--batch-size", type=int, default=32)
     p.add_argument("--batches", type=int, required=True)
     p.add_argument("--yes", action="store_true", help="skip the overwrite confirmation")
+    p.add_argument("--seeds", type=int, nargs="+", metavar="S",
+                   help="one run per seed; only the best on validation is saved")
     p.set_defaults(run=train)
 
     args = parser.parse_args(argv)

@@ -55,6 +55,7 @@ python -m venv .venv
 .venv\Scripts\activate             # Windows
 source .venv/bin/activate          # macOS / Linux
 pip install .                      # NumPy is the only dependency (use -e . to develop)
+pip install matplotlib             # only for the charts in tools/visualise.py
 ```
 
 The pretrained **Wren 1.0** files (about 31 MB, see [Pretrained weights](#pretrained-weights))
@@ -550,6 +551,7 @@ python evaluation/tests/test_evaluation.py     # quick checks, no real data need
 src/wren/      the package: Analyser (model.py), the CLI (cli.py), text cleaning,
                layers/, and train/ (training loop, database setup, data builder)
 tools/         export_model.py: turns the databases into the portable Wren 1.0 files
+               visualise.py: charts of results and training runs (needs matplotlib)
 docs/          PLAN.md, the packaging plan
 tests/         gradient checks, the overfit test, and prediction checks
 evaluation/    fresh test set builder, evaluation script, and logs of the training runs

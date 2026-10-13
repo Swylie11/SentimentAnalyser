@@ -29,6 +29,8 @@ class FilterBankLayer:
         self.bias = None              # (num_filters,)
         self.kernel_derivatives = None
         self.bias_derivatives = None
+        self.kernel_velocity = None   # Momentum velocities, same shapes as kernel and bias
+        self.bias_velocity = None
 
         self.inputs = None            # (batch, T, embedding_dim), kept for the backward gather
         self.argmax_positions = None  # (batch, num_filters) int, the winning word position per filter
@@ -40,18 +42,23 @@ class FilterBankLayer:
         self.bias = np.array(bias, dtype=float)
         self.kernel_derivatives = np.zeros_like(self.kernel)
         self.bias_derivatives = np.zeros_like(self.bias)
+        self.kernel_velocity = np.zeros_like(self.kernel)
+        self.bias_velocity = np.zeros_like(self.bias)
 
     def initialize_values(self):
-        self.fetchKernel()
-
+        """ Draws fresh kernels in memory only, without touching the database, so a
+        multi-seed run can't overwrite its saved champion. Call save() to store them. """
         # He initialisation: the fan in of a filter is every cell of the window it
         # sees, i.e. region_size * embedding_dim.
         fan_in = self.region_size * self.embedding_dim
         standard_dev = np.sqrt(2 / fan_in)
-        self.kernel = np.random.normal(0, standard_dev, self.kernel.shape)
-        self.bias = np.full_like(self.bias, 0.01)
+        self.kernel = np.random.normal(0, standard_dev, (self.num_filters, self.region_size, self.embedding_dim))
+        self.bias = np.full(self.num_filters, 0.01)
 
-        com.update_kernel(self.kernel.tolist(), self.layerNum, self.bias.tolist())
+        self.kernel_derivatives = np.zeros_like(self.kernel)
+        self.bias_derivatives = np.zeros_like(self.bias)
+        self.kernel_velocity = np.zeros_like(self.kernel)
+        self.bias_velocity = np.zeros_like(self.bias)
 
     def _windows(self, batch):
         """ (batch, T, D) -> (batch, positions, region_size, embedding_dim) sliding windows. """
@@ -118,10 +125,13 @@ class FilterBankLayer:
                 dinput[b, start:start + r, :] += contribution[b, f]
         return dinput
 
-    def adjust_kernel_values(self, learning_rate):
-        """ Plain SGD on the accumulated gradients, then clears them for the next batch. """
-        self.kernel = self.kernel - learning_rate * self.kernel_derivatives
-        self.bias = self.bias - learning_rate * self.bias_derivatives
+    def adjust_kernel_values(self, learning_rate, momentum):
+        """ SGD + momentum on the accumulated gradients (same rule as
+        NeuralLayer.adjust_values), then clears them for the next batch. """
+        self.kernel_velocity = momentum * self.kernel_velocity - learning_rate * self.kernel_derivatives
+        self.bias_velocity = momentum * self.bias_velocity - learning_rate * self.bias_derivatives
+        self.kernel = self.kernel + self.kernel_velocity
+        self.bias = self.bias + self.bias_velocity
 
         self.kernel_derivatives = np.zeros_like(self.kernel)
         self.bias_derivatives = np.zeros_like(self.bias)

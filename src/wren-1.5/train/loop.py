@@ -6,6 +6,7 @@ max-pool over word position) -> concatenate -> five dense ReLU layers -> softmax
 five star ratings.
 """
 
+import json
 import os
 import shutil
 import time
@@ -18,10 +19,13 @@ from ..layers.filter_bank import FilterBankLayer
 from ..layers.neural import NeuralLayer
 from ..model import forward_pass as _forward_pass
 
-# 0.01 was too low for this depth: the overfit test reached 100% on two random
-# seeds out of three and stalled at 46% on the third. At 0.03 it reaches 100% on
-# every seed tried.
-LEARNING_RATE = 0.03
+# Under plain SGD, 0.01 was too low for this depth: the overfit test reached 100%
+# on two random seeds out of three and stalled at 46% on the third, while 0.03
+# reached 100% on every seed tried. Momentum multiplies the steady-state step by
+# 1 / (1 - MOMENTUM) = 10, so 0.003 here matches the effective step size of 0.03
+# without momentum. Not yet re-tuned: compare with `wren train --seeds`.
+LEARNING_RATE = 0.003
+MOMENTUM = 0.9
 
 # Reviews held out and never trained on, so the reported accuracy means something.
 VALIDATION_SIZE = 2000
@@ -46,6 +50,11 @@ VALIDATION_EVERY = 200
 # quick checks are comparable to each other. Deliberately smaller than the full
 # VALIDATION_SIZE since this runs many times per training run.
 QUICK_VALIDATION_SIZE = 300
+
+# How often, in batches, to record the mean training loss over the batches since the
+# last record. Free to compute (the loss is already worked out every batch), so it is
+# much finer than VALIDATION_EVERY. Plotted by `tools/visualise.py loss`.
+LOSS_EVERY = 50
 
 
 
@@ -143,6 +152,9 @@ def training_batches(train_ids, reviews_per_batch, num_batches, seed):
 
 MODEL_DATABASES = ("neuron_weights.db", "convolution_layers.db")
 
+# Written by a multi-seed run, next to the databases it describes.
+SEED_RUNS_FILE = "seed_runs.json"
+
 
 def confirm_and_back_up_model(assume_yes=False):
     """ Confirms before training overwrites the stored model, and keeps a copy.
@@ -201,28 +213,40 @@ def restore_model(conv_layers, all_layers, snapshot):
         layer.biases = biases
 
 
-def train(reviews_per_batch, num_batches, assume_yes=False):
-    """Trains a new model on the databases in comms.DB_DIR, replacing the stored weights."""
+def build_layers():
+    """ The network's layers, with no values loaded yet. """
     conv_layers = [FilterBankLayer(layer_num, region_size, num_filters)
                   for layer_num, region_size, num_filters in FILTER_BANK_CONFIG]
     dense_layers = [NeuralLayer(n) for n in range(1, 6)]
     output_layer = NeuralLayer(6)
+    return conv_layers, dense_layers, output_layer
+
+
+def run_once(seed, layers, train_ids, validation_ids, reviews_per_batch, num_batches, checkpoint):
+    """ Trains the layers from a fresh start and evaluates them on validation_ids.
+
+    The seed only drives the global numpy RNG, which is used for weight
+    initialisation and dropout masks. The data split and batch order have their own
+    generators seeded from DATA_SEED, so every seed sees the same batches. With
+    checkpoint off nothing is written to the database.
+
+    Returns the run record, and the validation predictions and labels. """
+    conv_layers, dense_layers, output_layer = layers
     all_layers = list(dense_layers) + [output_layer]
+    quick_validation_ids = validation_ids[:QUICK_VALIDATION_SIZE]
 
-    if not confirm_and_back_up_model(assume_yes):
-        return
+    if seed is not None:
+        np.random.seed(seed)
+        print(f"\n=== Seed {seed} ===")
 
-    # Override the value matrices with freshly drawn values. If a new model is
-    # not being trained, the currently loaded values are used.
+    # Fresh values in memory. They are kept there for the whole run and only
+    # written to the database at checkpoints, if checkpoint is on.
     for layer in conv_layers:
         layer.initialize_values()
     for layer in all_layers:
         layer.initialise_values()
-
-    train_ids, validation_ids = com.split_ids(
-        com.fetch_all_review_ids(), VALIDATION_SIZE, DATA_SEED)
-    print(f"\n{len(train_ids)} training reviews, {len(validation_ids)} held out for validation.")
-    quick_validation_ids = validation_ids[:QUICK_VALIDATION_SIZE]
+    if checkpoint:
+        save_parameters(conv_layers, all_layers)
 
     start = time.time()
 
@@ -233,13 +257,9 @@ def train(reviews_per_batch, num_batches, assume_yes=False):
     train_labels = []
     best_quick_accuracy = -1.0
     best_snapshot = None
-
-    # Fetch the currently loaded values once. They are then kept in memory for
-    # the whole run and checkpointed to the database at intervals.
-    for layer in conv_layers:
-        layer.fetchKernel()
-    for layer in all_layers:
-        layer.fetch_values()
+    curve = []
+    loss_curve = []
+    window_loss = 0.0
 
     for batch_index, batch_ids in enumerate(
             training_batches(train_ids, reviews_per_batch, num_batches, DATA_SEED)):
@@ -258,6 +278,11 @@ def train(reviews_per_batch, num_batches, assume_yes=False):
         output_layer.ccel_calculation(one_hot)
         backward_pass(conv_layers, dense_layers, output_layer, one_hot)
         total_loss += output_layer.averageLoss
+        window_loss += output_layer.averageLoss
+        if (batch_index + 1) % LOSS_EVERY == 0:
+            loss_curve.append([batch_index + 1, window_loss / LOSS_EVERY])
+            print(f"  [batch {batch_index + 1}] training loss: {window_loss / LOSS_EVERY:.4f}")
+            window_loss = 0.0
 
         correct_outputs += int(np.sum(predictions == np.asarray(star_ratings)))
         seen += len(texts)
@@ -266,11 +291,11 @@ def train(reviews_per_batch, num_batches, assume_yes=False):
 
         # Updating values
         for layer in all_layers:
-            layer.adjust_values(LEARNING_RATE)
+            layer.adjust_values(LEARNING_RATE, MOMENTUM)
         for layer in conv_layers:
-            layer.adjust_kernel_values(LEARNING_RATE)
+            layer.adjust_kernel_values(LEARNING_RATE, MOMENTUM)
 
-        if (batch_index + 1) % CHECKPOINT_EVERY == 0:
+        if checkpoint and (batch_index + 1) % CHECKPOINT_EVERY == 0:
             save_parameters(conv_layers, all_layers)
 
         if (batch_index + 1) % VALIDATION_EVERY == 0:
@@ -278,6 +303,7 @@ def train(reviews_per_batch, num_batches, assume_yes=False):
                 conv_layers, dense_layers, output_layer, quick_validation_ids)
             print(f"  [batch {batch_index + 1}] quick validation: "
                  f"{100 * quick_exact:.2f}% exact, {100 * quick_within_one:.2f}% within one")
+            curve.append([batch_index + 1, quick_exact, quick_within_one])
             if quick_exact > best_quick_accuracy:
                 best_quick_accuracy = quick_exact
                 best_snapshot = snapshot_model(conv_layers, all_layers)
@@ -286,8 +312,6 @@ def train(reviews_per_batch, num_batches, assume_yes=False):
         restore_model(conv_layers, all_layers, best_snapshot)
         print(f"\nRestored best checkpoint seen during training "
              f"(quick validation accuracy {100 * best_quick_accuracy:.2f}%).")
-
-    save_parameters(conv_layers, all_layers)
 
     elapsed = time.time() - start
     print(f"\nTotal time elapsed: {elapsed:.2f}s")
@@ -304,9 +328,101 @@ def train(reviews_per_batch, num_batches, assume_yes=False):
     print(f"\nValidation ({len(labels)} held out reviews, never trained on)")
     print(f"  Accuracy         : {100 * exact:.2f}%")
     print(f"  Within one star  : {100 * within_one:.2f}%")
+
+    record = {"seed": seed, "curve": curve, "loss_curve": loss_curve, "val_exact": exact, "val_within_one": within_one,
+              "best_quick": best_quick_accuracy if best_snapshot is not None else None,
+              "seconds": round(elapsed, 1), "saved": False}
+    return record, predictions, labels
+
+
+def print_distributions(predictions, labels):
     print(f"  True labels      : {class_distribution(labels)}")
     print(f"  Predictions      : {class_distribution(predictions)}")
-
     if len(set(predictions.tolist())) == 1:
         print("\n  Warning: every prediction is the same class. The model has "
               "collapsed onto one output rather than learning to separate them.")
+
+
+def write_results(results):
+    """ Rewrites seed_runs.json next to the databases, so finished runs survive a crash. """
+    with open(os.path.join(com.DB_DIR, SEED_RUNS_FILE), "w", encoding="utf-8") as f:
+        json.dump(results, f, indent=1)
+
+
+def print_summary(results, predictions, labels):
+    runs = results["runs"]
+    print(f"\nMulti-seed summary ({len(runs)} runs, {results['batches']} batches each, "
+          f"data seed {results['data_seed']})\n")
+    print("  Seed   Exact    Within one   Best quick   Time      Saved")
+    print("  ----   ------   ----------   ----------   -------   -----")
+    for r in runs:
+        best_quick = f"{100 * r['best_quick']:.2f}%" if r["best_quick"] is not None else "n/a"
+        minutes, seconds = divmod(int(round(r["seconds"])), 60)
+        time_taken = f"{minutes}m {seconds:02d}s"
+        print(f"  {r['seed']:>4}   {100 * r['val_exact']:5.2f}%   {100 * r['val_within_one']:9.2f}%   "
+              f"{best_quick:>10}   {time_taken:>7}   {'yes' if r['saved'] else ''}".rstrip())
+
+    exact = 100 * np.array([r["val_exact"] for r in runs])
+    within_one = 100 * np.array([r["val_within_one"] for r in runs])
+    if len(runs) > 1:
+        # Sample std: these seeds are a sample of all possible seeds.
+        spread = (f"{exact.mean():.1f} ± {exact.std(ddof=1):.1f}%   "
+                  f"{within_one.mean():.1f} ± {within_one.std(ddof=1):.1f}%")
+    else:
+        spread = f"{exact.mean():.1f}%, std n/a   {within_one.mean():.1f}%, std n/a"
+    champion = next(r for r in runs if r["seed"] == results["champion_seed"])
+    print(f"\n  Mean ± std     {spread}")
+    print(f"  Kept           seed {champion['seed']} ({100 * champion['val_exact']:.2f}% exact) -> "
+          + ", ".join(MODEL_DATABASES))
+    print_distributions(predictions, labels)
+
+
+def train(reviews_per_batch, num_batches, assume_yes=False, seeds=None):
+    """Trains a new model on the databases in comms.DB_DIR, replacing the stored weights.
+
+    With seeds, trains once per seed and saves only a run that beats every earlier
+    one on the full validation set (the champion). The mean and std across seeds are
+    the fair figure for the architecture; the champion's own score is optimistic. """
+    layers = build_layers()
+    conv_layers, dense_layers, output_layer = layers
+    all_layers = list(dense_layers) + [output_layer]
+
+    if not confirm_and_back_up_model(assume_yes):
+        return
+
+    train_ids, validation_ids = com.split_ids(
+        com.fetch_all_review_ids(), VALIDATION_SIZE, DATA_SEED)
+    print(f"\n{len(train_ids)} training reviews, {len(validation_ids)} held out for validation.")
+
+    # With one run there is no champion to protect, so it checkpoints as before.
+    checkpoint = seeds is None or len(seeds) == 1
+
+    if seeds is None:
+        _, predictions, labels = run_once(None, layers, train_ids, validation_ids,
+                                          reviews_per_batch, num_batches, checkpoint)
+        save_parameters(conv_layers, all_layers)
+        print_distributions(predictions, labels)
+        return
+
+    results = {"batches": num_batches, "batch_size": reviews_per_batch, "data_seed": DATA_SEED,
+               "dropout_rate": NeuralLayer.dropout_rate, "learning_rate": LEARNING_RATE, "momentum": MOMENTUM,
+               "validation_size": len(validation_ids), "runs": [], "champion_seed": None}
+    champion_exact = -1.0
+    champion_predictions = None
+
+    for seed in seeds:
+        record, predictions, labels = run_once(seed, layers, train_ids, validation_ids,
+                                               reviews_per_batch, num_batches, checkpoint)
+        # Strictly better only, so a tie keeps the earlier seed and the files on
+        # disk change only when a run actually beats the champion.
+        if record["val_exact"] > champion_exact:
+            save_parameters(conv_layers, all_layers)
+            champion_exact = record["val_exact"]
+            champion_predictions = predictions
+            results["champion_seed"] = seed
+            record["saved"] = True
+            print(f"  New champion, saved to {', '.join(MODEL_DATABASES)}.")
+        results["runs"].append(record)
+        write_results(results)
+
+    print_summary(results, champion_predictions, labels)

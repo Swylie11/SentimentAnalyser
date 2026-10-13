@@ -4,6 +4,8 @@ from ..train import comms as com
 
 class NeuralLayer:
     """ One layer of a neural network """
+    dropout_rate = 0.2  # Fraction of hidden units zeroed per training batch
+
     def __init__(self, layerNum):
         """This layer takes a matrix of inputs and
         collects the weights and biases externally"""
@@ -21,6 +23,8 @@ class NeuralLayer:
         self.avdbiases = None
         self.droput_mask = None
         self.batch_droput_outputs = None
+        self.vweights = None
+        self.vbiases = None
 
     def fetch_values(self):
         """ Calls the SQL query in Comms.py and fetches the
@@ -28,28 +32,36 @@ class NeuralLayer:
         values = com.fetch_layer(self.layerNum)
         self.weights = values[0]
         self.biases = values[1]
+        self.reset_gradients()
+
+    def reset_gradients(self):
+        """ Zeroes the running gradient totals for the current weight shape. """
         # Explicitly float: zeros_like would inherit an integer dtype from a
         # database holding whole-number weights and truncate every gradient.
         self.avdweights = np.zeros(np.array(self.weights).T.shape, dtype=float)
         self.avdbiases = np.zeros((1, len(self.biases)), dtype=float)
+        # Momentum velocities, same shapes as the gradients. Zeroed with them so a
+        # fresh run doesn't inherit the previous run's direction of travel.
+        self.vweights = np.zeros_like(self.avdweights)
+        self.vbiases = np.zeros_like(self.avdbiases)
 
     def initialise_values(self):
-        values = com.fetch_layer(self.layerNum)  # Fetching values for neural layer shape
-        self.weights = values[0]
-        self.biases = values[1]
+        """ Draws fresh weights in memory only. The database is read for the layer's
+        shape but not written, so a multi-seed run can't overwrite its saved champion.
+        Call save() to store them. """
+        weights, biases = com.fetch_layer(self.layerNum)  # Fetching values for neural layer shape
 
-        neurons_out = len(self.weights)  # Neurons in this layer
-        neurons_in = len(self.weights[0])  # Neurons in the previous layer
+        neurons_out = len(weights)  # Neurons in this layer
+        neurons_in = len(weights[0])  # Neurons in the previous layer
 
         # Weight initialisation
         self.weights = self.he_normal(neurons_in, neurons_out)
 
         # Bias initialisation. A small positive bias suits ReLU: it starts every unit
         # on the active side of the clamp.
-        self.biases = np.full_like(self.biases, 0.01)
+        self.biases = np.full(len(biases), 0.01)
 
-        # Database update
-        com.update_values(self.layerNum, self.weights.tolist(), self.biases.tolist())
+        self.reset_gradients()
 
     @staticmethod
     def he_normal(n_in, n_out):
@@ -75,7 +87,6 @@ class NeuralLayer:
         self.layer_output = np.dot(inputs, np.array(self.weights).T) + self.biases
         self.output = np.maximum(0, self.layer_output)  # Applying the ReLU function 'zeros' out the negative values
 
-        self.dropout_rate = 0.2
         H = self.output
         self.droput_mask = (np.random.rand(*H.shape) < (1-self.dropout_rate)).astype(float)
         self.batch_droput_outputs = H * self.droput_mask / (1 - self.dropout_rate)
@@ -174,17 +185,24 @@ class NeuralLayer:
 
         return dinputs
 
-    def adjust_values(self, learning_rate):
-        """ Applies the accumulated gradients to the weights and biases.
+    def adjust_values(self, learning_rate, momentum):
+        """ Applies the accumulated gradients to the weights and biases with SGD + momentum.
+
+        The velocity is a running sum of past steps, decayed by momentum each batch,
+        so consistent gradient directions build up speed and noisy ones cancel out.
+        momentum=0 is plain SGD.
 
         No batch divisor here. combined_derivative already divides by the number of
         reviews in the batch, so avdweights holds the gradient of the mean loss and a
         second division would scale the learning rate by 1/batch_size. """
         weights_copy = np.array(self.weights).T  # Copy required as weights is not saved transposed
 
+        self.vweights = momentum * self.vweights - learning_rate * self.avdweights
+        self.vbiases = momentum * self.vbiases - learning_rate * self.avdbiases
+
         # Adjusting values
-        new_weights = np.subtract(weights_copy, np.multiply(learning_rate, self.avdweights))
-        new_biases = np.subtract(self.biases, np.multiply(learning_rate, self.avdbiases))[0]
+        new_weights = weights_copy + self.vweights
+        new_biases = (self.biases + self.vbiases)[0]
 
         self.weights = new_weights.T
         self.biases = new_biases
