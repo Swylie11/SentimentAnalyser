@@ -2,6 +2,7 @@ import numpy as np
 from numpy.lib.stride_tricks import sliding_window_view
 
 from ..train import comms as com
+from .neural import adamw_step
 
 
 class FilterBankLayer:
@@ -29,8 +30,11 @@ class FilterBankLayer:
         self.bias = None              # (num_filters,)
         self.kernel_derivatives = None
         self.bias_derivatives = None
-        self.kernel_velocity = None   # Momentum velocities, same shapes as kernel and bias
-        self.bias_velocity = None
+        self.kernel_m = None          # AdamW moments, same shapes as kernel and bias
+        self.kernel_v = None
+        self.bias_m = None
+        self.bias_v = None
+        self.step = 0
 
         self.inputs = None            # (batch, T, embedding_dim), kept for the backward gather
         self.argmax_positions = None  # (batch, num_filters) int, the winning word position per filter
@@ -42,8 +46,11 @@ class FilterBankLayer:
         self.bias = np.array(bias, dtype=float)
         self.kernel_derivatives = np.zeros_like(self.kernel)
         self.bias_derivatives = np.zeros_like(self.bias)
-        self.kernel_velocity = np.zeros_like(self.kernel)
-        self.bias_velocity = np.zeros_like(self.bias)
+        self.kernel_m = np.zeros_like(self.kernel)
+        self.kernel_v = np.zeros_like(self.kernel)
+        self.bias_m = np.zeros_like(self.bias)
+        self.bias_v = np.zeros_like(self.bias)
+        self.step = 0
 
     def initialize_values(self):
         """ Draws fresh kernels in memory only, without touching the database, so a
@@ -57,8 +64,11 @@ class FilterBankLayer:
 
         self.kernel_derivatives = np.zeros_like(self.kernel)
         self.bias_derivatives = np.zeros_like(self.bias)
-        self.kernel_velocity = np.zeros_like(self.kernel)
-        self.bias_velocity = np.zeros_like(self.bias)
+        self.kernel_m = np.zeros_like(self.kernel)
+        self.kernel_v = np.zeros_like(self.kernel)
+        self.bias_m = np.zeros_like(self.bias)
+        self.bias_v = np.zeros_like(self.bias)
+        self.step = 0
 
     def _windows(self, batch):
         """ (batch, T, D) -> (batch, positions, region_size, embedding_dim) sliding windows. """
@@ -125,13 +135,15 @@ class FilterBankLayer:
                 dinput[b, start:start + r, :] += contribution[b, f]
         return dinput
 
-    def adjust_kernel_values(self, learning_rate, momentum):
-        """ SGD + momentum on the accumulated gradients (same rule as
-        NeuralLayer.adjust_values), then clears them for the next batch. """
-        self.kernel_velocity = momentum * self.kernel_velocity - learning_rate * self.kernel_derivatives
-        self.bias_velocity = momentum * self.bias_velocity - learning_rate * self.bias_derivatives
-        self.kernel = self.kernel + self.kernel_velocity
-        self.bias = self.bias + self.bias_velocity
+    def adjust_kernel_values(self, learning_rate, weight_decay):
+        """ AdamW on the accumulated gradients (same rule as NeuralLayer.adjust_values,
+        biases not decayed), then clears them for the next batch. """
+        self.step += 1
+        self.kernel, self.kernel_m, self.kernel_v = adamw_step(
+            self.kernel, self.kernel_derivatives, self.kernel_m, self.kernel_v,
+            self.step, learning_rate, weight_decay)
+        self.bias, self.bias_m, self.bias_v = adamw_step(
+            self.bias, self.bias_derivatives, self.bias_m, self.bias_v, self.step, learning_rate, 0.0)
 
         self.kernel_derivatives = np.zeros_like(self.kernel)
         self.bias_derivatives = np.zeros_like(self.bias)

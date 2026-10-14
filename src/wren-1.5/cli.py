@@ -52,7 +52,12 @@ def train(args):
     from .train import comms, loop
     if args.workdir:
         comms.set_db_dir(args.workdir)
-    loop.train(args.batch_size, args.batches, args.yes, args.seeds)
+    loop.train(args.batch_size, args.batches, args.yes, args.seeds, args.log)
+
+
+def watch(args):
+    from .train import comms, dashboard
+    dashboard.watch(args.workdir or comms.DB_DIR, args.interval)
 
 
 def main(argv=None):
@@ -87,7 +92,13 @@ def main(argv=None):
     p.add_argument("--yes", action="store_true", help="skip the overwrite confirmation")
     p.add_argument("--seeds", type=int, nargs="+", metavar="S",
                    help="one run per seed; only the best on validation is saved")
+    p.add_argument("--log", metavar="FILE", help="also append every message to FILE")
     p.set_defaults(run=train)
+
+    p = sub.add_parser("watch", help="live training stats; run it in a second window")
+    p.add_argument("--workdir", help="database directory (default $WREN_WORKDIR or ./wren-work)")
+    p.add_argument("--interval", type=float, default=2.0, help="seconds between refreshes")
+    p.set_defaults(run=watch)
 
     args = parser.parse_args(argv)
     try:

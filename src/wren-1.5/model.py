@@ -3,7 +3,7 @@
 import numpy as np
 
 from . import store, text
-from .config import FILTER_BANK_CONFIG, NUM_DENSE, SENTIMENT_LABELS
+from .config import FILTER_BANK_CONFIG, SENTIMENT_LABELS
 from .layers.filter_bank import FilterBankLayer
 from .layers.neural import NeuralLayer
 
@@ -44,7 +44,9 @@ class Analyser:
 
         with np.load(weights) as w:
             self.conv = [FilterBankLayer(n, r, f) for n, r, f in FILTER_BANK_CONFIG]
-            dense = [NeuralLayer(n) for n in range(1, NUM_DENSE + 1)]
+            # Counted from the file, so 1.0's six dense layers and 1.5's two both load.
+            num_dense = sum(1 for key in w.files if key.startswith("dense") and key.endswith("_weights"))
+            dense = [NeuralLayer(n) for n in range(1, num_dense + 1)]
             for layer in self.conv:
                 layer.kernel = w[f"conv{layer.layerNum}_kernel"]
                 layer.bias = w[f"conv{layer.layerNum}_bias"]

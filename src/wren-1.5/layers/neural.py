@@ -1,6 +1,30 @@
 import numpy as np
 from ..train import comms as com
 
+# AdamW (Loshchilov & Hutter 2019). The standard defaults, which rarely need tuning.
+BETA1 = 0.9    # decay of the running mean of gradients (the momentum term)
+BETA2 = 0.999  # decay of the running mean of squared gradients (the per-weight scale)
+EPSILON = 1e-8
+
+
+def adamw_step(param, grad, m, v, step, learning_rate, weight_decay):
+    """ One AdamW update. Returns the new (param, m, v).
+
+    Each weight's step is divided by its own recent gradient size, so weights deep in
+    the network whose gradients are tiny still move at roughly learning_rate per step.
+    That is what plain SGD lacks: there, small gradients mean small steps, which is
+    why runs sat at chance loss (ln 5 = 1.609) for thousands of batches.
+
+    Weight decay is applied to the weight directly rather than added to the gradient
+    (that difference is the "W" in AdamW), so it isn't rescaled by the adaptive step.
+    step counts from 1; the bias correction undoes m and v starting at zero. """
+    m = BETA1 * m + (1 - BETA1) * grad
+    v = BETA2 * v + (1 - BETA2) * grad ** 2
+    m_hat = m / (1 - BETA1 ** step)
+    v_hat = v / (1 - BETA2 ** step)
+    param = param - learning_rate * (m_hat / (np.sqrt(v_hat) + EPSILON) + weight_decay * param)
+    return param, m, v
+
 
 class NeuralLayer:
     """ One layer of a neural network """
@@ -23,8 +47,11 @@ class NeuralLayer:
         self.avdbiases = None
         self.droput_mask = None
         self.batch_droput_outputs = None
+        self.mweights = None  # AdamW first and second moments, same shapes as the gradients
         self.vweights = None
+        self.mbiases = None
         self.vbiases = None
+        self.step = 0
 
     def fetch_values(self):
         """ Calls the SQL query in Comms.py and fetches the
@@ -40,10 +67,13 @@ class NeuralLayer:
         # database holding whole-number weights and truncate every gradient.
         self.avdweights = np.zeros(np.array(self.weights).T.shape, dtype=float)
         self.avdbiases = np.zeros((1, len(self.biases)), dtype=float)
-        # Momentum velocities, same shapes as the gradients. Zeroed with them so a
-        # fresh run doesn't inherit the previous run's direction of travel.
+        # AdamW moments, zeroed with the gradients so a fresh run doesn't inherit the
+        # previous run's direction of travel.
+        self.mweights = np.zeros_like(self.avdweights)
         self.vweights = np.zeros_like(self.avdweights)
+        self.mbiases = np.zeros_like(self.avdbiases)
         self.vbiases = np.zeros_like(self.avdbiases)
+        self.step = 0
 
     def initialise_values(self):
         """ Draws fresh weights in memory only. The database is read for the layer's
@@ -185,27 +215,23 @@ class NeuralLayer:
 
         return dinputs
 
-    def adjust_values(self, learning_rate, momentum):
-        """ Applies the accumulated gradients to the weights and biases with SGD + momentum.
+    def adjust_values(self, learning_rate, weight_decay):
+        """ Applies the accumulated gradients to the weights and biases with AdamW.
 
-        The velocity is a running sum of past steps, decayed by momentum each batch,
-        so consistent gradient directions build up speed and noisy ones cancel out.
-        momentum=0 is plain SGD.
+        Biases are not decayed: they don't contribute to overfitting the way weights do.
 
         No batch divisor here. combined_derivative already divides by the number of
-        reviews in the batch, so avdweights holds the gradient of the mean loss and a
-        second division would scale the learning rate by 1/batch_size. """
-        weights_copy = np.array(self.weights).T  # Copy required as weights is not saved transposed
+        reviews in the batch, so avdweights holds the gradient of the mean loss. """
+        self.step += 1
+        weights_t, self.mweights, self.vweights = adamw_step(
+            np.array(self.weights, dtype=float).T,  # Gradients are (n_in, n_out), weights are stored transposed
+            self.avdweights, self.mweights, self.vweights, self.step, learning_rate, weight_decay)
+        biases, self.mbiases, self.vbiases = adamw_step(
+            np.asarray(self.biases, dtype=float)[None, :],
+            self.avdbiases, self.mbiases, self.vbiases, self.step, learning_rate, 0.0)
 
-        self.vweights = momentum * self.vweights - learning_rate * self.avdweights
-        self.vbiases = momentum * self.vbiases - learning_rate * self.avdbiases
-
-        # Adjusting values
-        new_weights = weights_copy + self.vweights
-        new_biases = (self.biases + self.vbiases)[0]
-
-        self.weights = new_weights.T
-        self.biases = new_biases
+        self.weights = weights_t.T
+        self.biases = biases[0]
 
         # Clear the running totals so the next batch starts from zero
         self.avdweights = np.zeros_like(self.avdweights)
