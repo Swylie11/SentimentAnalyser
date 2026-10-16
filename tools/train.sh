@@ -49,4 +49,4 @@ echo "== Training: seeds $SEEDS, $BATCHES batches of $BATCH_SIZE =="
 python -u tools/wren15.py train --workdir "$WORKDIR" --batches "$BATCHES" \
     --batch-size "$BATCH_SIZE" --seeds $SEEDS --yes
 
-echo "== Done. Loss video: python tools/visualise.py loss =="
+echo "== Done. Loss video: python tools/visualise.py loss --file $WORKDIR/seed_runs.json =="

@@ -2,7 +2,10 @@
 
 import argparse
 import json
+import os
 import sys
+
+REPO = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
 
 
 def predict(args):
@@ -52,12 +55,18 @@ def train(args):
     from .train import comms, loop
     if args.workdir:
         comms.set_db_dir(args.workdir)
-    loop.train(args.batch_size, args.batches, args.yes, args.seeds, args.log)
+    loop.train(args.batch_size, args.batches, args.yes, args.seeds, args.log,
+               None if args.no_eval else args.eval_data, args.history)
 
 
 def watch(args):
     from .train import comms, dashboard
     dashboard.watch(args.workdir or comms.DB_DIR, args.interval)
+
+
+def demo(args):
+    from .train import dashboard
+    dashboard.demo(args.interval)
 
 
 def main(argv=None):
@@ -93,12 +102,24 @@ def main(argv=None):
     p.add_argument("--seeds", type=int, nargs="+", metavar="S",
                    help="one run per seed; only the best on validation is saved")
     p.add_argument("--log", metavar="FILE", help="also append every message to FILE")
+    p.add_argument("--eval-data", metavar="JSONL", default=os.path.join(REPO, "Data", "eval_test_multi.jsonl"),
+                   help="fresh test set scored once training ends (default Data/eval_test_multi.jsonl, "
+                        "the five training categories)")
+    p.add_argument("--history", metavar="FILE",
+                   default=os.path.join(REPO, "evaluation", "wren15_history.jsonl"),
+                   help="one line per training run is appended here "
+                        "(default evaluation/wren15_history.jsonl)")
+    p.add_argument("--no-eval", action="store_true", help="skip the test set evaluation")
     p.set_defaults(run=train)
 
     p = sub.add_parser("watch", help="live training stats; run it in a second window")
     p.add_argument("--workdir", help="database directory (default $WREN_WORKDIR or ./wren-work)")
     p.add_argument("--interval", type=float, default=2.0, help="seconds between refreshes")
     p.set_defaults(run=watch)
+
+    p = sub.add_parser("demo", help="the watch panel on a fake run; trains nothing, touches no workdir")
+    p.add_argument("--interval", type=float, default=0.5, help="seconds between refreshes")
+    p.set_defaults(run=demo)
 
     args = parser.parse_args(argv)
     try:

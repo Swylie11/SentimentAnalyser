@@ -16,13 +16,14 @@ def forward_pass(conv_layers, dense_layers, output_layer, texts, lookup, trainin
     """ Runs a batch of review texts through the whole network.
 
     `lookup(word)` returns the word's 300 vector. Returns the softmax output,
-    shape (len(texts), 5). `training` applies dropout to the dense layers. """
+    shape (len(texts), 5). `training` applies dropout to the filter bank features
+    and the dense layers. """
     conv_input = text.pad_matrix(text.return_vector_matrix_jsonl(text.format_entry_data(texts), lookup))
     conv_input = np.asarray(conv_input, dtype=float)
 
     # Parallel filter bank branches over the same embedding input, concatenated into
     # one feature vector -- not a stacked pipeline like the old two ConvLayers.
-    activations = np.concatenate([layer.convPass(conv_input) for layer in conv_layers], axis=1)
+    activations = np.concatenate([layer.convPass(conv_input, training) for layer in conv_layers], axis=1)
 
     for layer in dense_layers:
         if training:

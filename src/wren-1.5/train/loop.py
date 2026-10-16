@@ -28,6 +28,15 @@ from ..model import forward_pass as _forward_pass
 LEARNING_RATE = 1e-3
 WEIGHT_DECAY = 0.01
 
+
+def cosine_learning_rate(batch_index, num_batches):
+    """ LEARNING_RATE at the first batch, falling along a half cosine to 0 at the last.
+
+    At a constant rate the quick validation checks late in a run swung by up to 9
+    points between checks, so picking the best checkpoint was partly luck. Shrinking
+    the steps lets the run settle instead of bouncing around the minimum. """
+    return LEARNING_RATE * 0.5 * (1 + np.cos(np.pi * batch_index / num_batches))
+
 # Reviews held out and never trained on, so the reported accuracy means something.
 VALIDATION_SIZE = 2000
 
@@ -114,6 +123,16 @@ def class_distribution(values):
     return "  ".join(parts)
 
 
+def predict_texts(conv_layers, dense_layers, output_layer, texts):
+    """ 1-5 star predictions for review texts, a chunk at a time to bound memory. """
+    predictions = []
+    for start in range(0, len(texts), EVALUATION_CHUNK):
+        softmax_output = forward_pass(conv_layers, dense_layers, output_layer,
+                                      texts[start:start + EVALUATION_CHUNK])
+        predictions.extend((np.argmax(softmax_output, axis=1) + 1).tolist())
+    return predictions
+
+
 def evaluate(conv_layers, dense_layers, output_layer, review_ids):
     """ Runs the network over a set of reviews without training on them.
 
@@ -124,14 +143,9 @@ def evaluate(conv_layers, dense_layers, output_layer, review_ids):
     labels = []
 
     for start in range(0, len(review_ids), EVALUATION_CHUNK):
-        chunk = review_ids[start:start + EVALUATION_CHUNK]
-        rows = com.fetch_batch(chunk)
-
-        texts = [row[1] for row in rows]
+        rows = com.fetch_batch(review_ids[start:start + EVALUATION_CHUNK])
         labels.extend(int(row[0]) for row in rows)
-
-        softmax_output = forward_pass(conv_layers, dense_layers, output_layer, texts)
-        predictions.extend((np.argmax(softmax_output, axis=1) + 1).tolist())
+        predictions.extend(predict_texts(conv_layers, dense_layers, output_layer, [row[1] for row in rows]))
 
     predictions = np.asarray(predictions)
     labels = np.asarray(labels)
@@ -300,10 +314,11 @@ def run_once(seed, layers, train_ids, validation_ids, reviews_per_batch, num_bat
         train_labels.extend(star_ratings)
 
         # Updating values
+        learning_rate = cosine_learning_rate(batch_index, num_batches)
         for layer in all_layers:
-            layer.adjust_values(LEARNING_RATE, WEIGHT_DECAY)
+            layer.adjust_values(learning_rate, WEIGHT_DECAY)
         for layer in conv_layers:
-            layer.adjust_kernel_values(LEARNING_RATE, WEIGHT_DECAY)
+            layer.adjust_kernel_values(learning_rate, WEIGHT_DECAY)
 
         if checkpoint and (batch_index + 1) % CHECKPOINT_EVERY == 0:
             save_parameters(conv_layers, all_layers)
@@ -398,14 +413,92 @@ def short_path(path):
     return path if relative.startswith("..") else relative
 
 
-def train(reviews_per_batch, num_batches, assume_yes=False, seeds=None, log_path=None):
+def wilson(successes, n, z=1.96):
+    """ 95% Wilson score interval for a proportion, as evaluation/evaluate.py reports it. """
+    if n == 0:
+        return 0.0, 0.0
+    p = successes / n
+    denom = 1 + z * z / n
+    centre = (p + z * z / (2 * n)) / denom
+    half = z * np.sqrt(p * (1 - p) / n + z * z / (4 * n * n)) / denom
+    return float(centre - half), float(centre + half)
+
+
+def test_evaluation(layers, test_path):
+    """ Scores the saved model on a fresh test set, a .jsonl of {rating, text} lines
+    such as Data/eval_test.jsonl, the same set Wren 1.0's 47.0% was measured on.
+
+    Reads the weights back from the databases rather than using what is in memory:
+    after a multi-seed run memory holds the last seed, not the champion that was saved. """
+    conv_layers, dense_layers, output_layer = layers
+    for layer in conv_layers:
+        layer.fetchKernel()
+    for layer in list(dense_layers) + [output_layer]:
+        layer.fetch_values()
+
+    with open(test_path, encoding="utf-8") as f:
+        records = [json.loads(line) for line in f if line.strip()]
+    labels = np.array([int(r["rating"]) for r in records])
+    dash.say(f"\nEvaluating the saved model on {test_path} ({len(labels):,} reviews)...")
+    predictions = np.asarray(predict_texts(conv_layers, dense_layers, output_layer,
+                                           [r["text"] for r in records]))
+
+    exact_k = int(np.sum(predictions == labels))
+    within_k = int(np.sum(np.abs(predictions - labels) <= 1))
+    return {"test_set": test_path, "n": len(labels),
+            "exact": exact_k / len(labels), "exact_ci": wilson(exact_k, len(labels)),
+            "within_one": within_k / len(labels), "within_one_ci": wilson(within_k, len(labels)),
+            "recall": [float(np.mean(predictions[labels == s] == s)) if np.any(labels == s) else None
+                       for s in range(1, NUM_CLASSES + 1)],
+            "prediction_counts": [int(np.sum(predictions == s)) for s in range(1, NUM_CLASSES + 1)]}
+
+
+def print_test(test, previous_best):
+    lo, hi = test["exact_ci"]
+    dash.say(f"\nFresh test set ({test['n']:,} reviews, never trained on or used for selection)",
+             style="bold")
+    dash.say(f"  Exact accuracy   : {100 * test['exact']:.1f}%   95% CI {100 * lo:.1f} to {100 * hi:.1f}")
+    dash.say(f"  Within one star  : {100 * test['within_one']:.1f}%")
+    dash.say("  Recall per star  : " + "  ".join(
+        f"{s}*: {100 * r:.0f}%" for s, r in enumerate(test["recall"], 1) if r is not None))
+    if previous_best:
+        dash.say(f"  Previous best    : {100 * previous_best['test']['exact']:.1f}% "
+                 f"({previous_best['finished']}, {previous_best['workdir']})")
+
+
+def read_history(history_path):
+    if not os.path.exists(history_path):
+        return []
+    with open(history_path, encoding="utf-8") as f:
+        return [json.loads(line) for line in f if line.strip()]
+
+
+def append_history(history_path, results, test):
+    """ Adds one line for this training run to the history file. Unlike seed_runs.json,
+    which each run overwrites in its own work directory, this file keeps every run, so
+    tonight's result can be compared with last night's. """
+    record = {"finished": time.strftime("%Y-%m-%d %H:%M"), "workdir": com.DB_DIR,
+              **{k: v for k, v in results.items() if k != "runs"},
+              "val_exact": {str(r["seed"]): r["val_exact"] for r in results["runs"]},
+              "test": test}
+    os.makedirs(os.path.dirname(os.path.abspath(history_path)), exist_ok=True)
+    with open(history_path, "a", encoding="utf-8") as f:
+        f.write(json.dumps(record) + "\n")
+
+
+def train(reviews_per_batch, num_batches, assume_yes=False, seeds=None, log_path=None,
+          test_path=None, history_path=None):
     """Trains a new model on the databases in comms.DB_DIR, replacing the stored weights.
 
     With seeds, trains once per seed and saves only a run that beats every earlier
     one on the full validation set (the champion). The mean and std across seeds are
     the fair figure for the architecture; the champion's own score is optimistic.
 
-    log_path, if given, gets every message appended to it, without the progress bar. """
+    log_path, if given, gets every message appended to it, without the progress bar.
+
+    test_path, if given and present, scores the saved model on that fresh test set
+    once training ends. The scores go into seed_runs.json and, with history_path, a
+    line is appended there too. """
     global dash
     layers = build_layers()
 
@@ -417,16 +510,36 @@ def train(reviews_per_batch, num_batches, assume_yes=False, seeds=None, log_path
 
     dash = Dashboard(com.DB_DIR, log_path)
     dash.banner({"seeds": " ".join(map(str, seeds)) if seeds else "none",
-                 "batches": f"{num_batches:,} x {reviews_per_batch}", "lr": LEARNING_RATE,
-                 "optimiser": f"AdamW, weight decay {WEIGHT_DECAY}", "dropout": NeuralLayer.dropout_rate,
+                 "batches": f"{num_batches:,} x {reviews_per_batch}", "lr": f"{LEARNING_RATE}, cosine to 0",
+                 "optimiser": f"AdamW, weight decay {WEIGHT_DECAY}",
+                 "dropout": f"features {FilterBankLayer.dropout_rate}, hidden {NeuralLayer.dropout_rate}",
                  "hidden": HIDDEN_WIDTHS},
                 f'python tools/wren15.py watch --workdir "{short_path(com.DB_DIR)}"')
     dash.start(seeds or [None], num_batches, reviews_per_batch)
     try:
-        _train(layers, reviews_per_batch, num_batches, seeds)
+        results = _train(layers, reviews_per_batch, num_batches, seeds)
     finally:
         if dash.status["phase"] != "finished":
             dash.finish("stopped")  # crashed or Ctrl+C: put the terminal back, tell the watcher
+
+    if not test_path:
+        return
+    if not os.path.exists(test_path):
+        dash.say(f"\nNo test set at {test_path}, so the saved model was not evaluated.")
+        return
+    test = test_evaluation(layers, test_path)
+    results["test"] = test
+    write_results(results)
+    if history_path:
+        # Only runs scored on this same test set are comparable.
+        same = os.path.normcase(os.path.abspath(test_path))
+        earlier = [r for r in read_history(history_path) if r.get("test")
+                   and os.path.normcase(os.path.abspath(r["test"]["test_set"])) == same]
+        print_test(test, max(earlier, key=lambda r: r["test"]["exact"], default=None))
+        append_history(history_path, results, test)
+        dash.say(f"  Saved to {SEED_RUNS_FILE} and {history_path}")
+    else:
+        print_test(test, None)
 
 
 def _train(layers, reviews_per_batch, num_batches, seeds):
@@ -440,19 +553,23 @@ def _train(layers, reviews_per_batch, num_batches, seeds):
     # With one run there is no champion to protect, so it checkpoints as before.
     checkpoint = seeds is None or len(seeds) == 1
 
+    results = {"batches": num_batches, "batch_size": reviews_per_batch, "data_seed": DATA_SEED,
+               "dropout_rate": NeuralLayer.dropout_rate, "feature_dropout_rate": FilterBankLayer.dropout_rate,
+               "hidden_widths": HIDDEN_WIDTHS, "learning_rate": LEARNING_RATE, "lr_schedule": "cosine",
+               "optimiser": "adamw", "weight_decay": WEIGHT_DECAY,
+               "validation_size": len(validation_ids), "runs": [], "champion_seed": None}
+
     if seeds is None:
         record, predictions, labels = run_once(None, layers, train_ids, validation_ids,
                                                reviews_per_batch, num_batches, checkpoint)
         save_parameters(conv_layers, all_layers)
         record["saved"] = True
+        results["runs"].append(record)
         dash.seed_done(record, None, record["val_exact"])
         dash.finish()
         print_distributions(predictions, labels)
-        return
+        return results
 
-    results = {"batches": num_batches, "batch_size": reviews_per_batch, "data_seed": DATA_SEED,
-               "dropout_rate": NeuralLayer.dropout_rate, "hidden_widths": HIDDEN_WIDTHS, "learning_rate": LEARNING_RATE, "optimiser": "adamw", "weight_decay": WEIGHT_DECAY,
-               "validation_size": len(validation_ids), "runs": [], "champion_seed": None}
     champion_exact = -1.0
     champion_predictions = None
 
@@ -474,3 +591,4 @@ def _train(layers, reviews_per_batch, num_batches, seeds):
 
     dash.finish()
     print_summary(results, champion_predictions, labels)
+    return results

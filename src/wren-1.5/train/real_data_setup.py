@@ -61,11 +61,18 @@ def open_maybe_gzip(path):
     return open(path, "r", encoding="utf-8", errors="replace")
 
 
-def sample_reviews(path, per_class, seed):
+def normalise(text):
+    """Lowercased word tokens joined by single spaces, as evaluation/build_test_set.py
+    uses, so formatting differences (case, punctuation, whitespace) don't hide a duplicate."""
+    return " ".join(re.findall(r"\w+", text.lower()))
+
+
+def sample_reviews(path, per_class, seed, skip=frozenset()):
     """Reservoir samples `per_class` reviews for each star rating.
 
     One pass over the file. Every qualifying review has an equal chance of
     ending up in its class's sample regardless of where it sits in the file.
+    Reviews whose normalise()d text is in `skip` are never eligible.
     """
     rng = random.Random(seed)
     reservoirs = {star: [] for star in range(1, NUM_CLASSES + 1)}
@@ -92,6 +99,8 @@ def sample_reviews(path, per_class, seed):
 
             text = HTML_TAG.sub(" ", text).strip()
             if not (MIN_WORDS <= len(text.split()) <= MAX_WORDS):
+                continue
+            if skip and normalise(text) in skip:
                 continue
 
             kept_eligible += 1
@@ -121,12 +130,9 @@ def sample_reviews(path, per_class, seed):
     return reservoirs
 
 
-def write_reviews(reservoirs, out_path, seed):
-    """Writes the sampled reviews as {"rating": ..., "text": ...} lines, shuffled."""
-    rows = []
-    for star, texts in reservoirs.items():
-        for text in texts:
-            rows.append({"rating": star, "text": text})
+def write_reviews(rows, out_path, seed):
+    """Writes {"rating": ..., "text": ...} rows as lines, shuffled."""
+    rows = list(rows)
 
     # Interleave the classes. InitDatabases assigns review_id in file order and
     # main.py shuffles before splitting, but a class-ordered file is a trap for
@@ -199,8 +205,14 @@ def write_embeddings(vec_path, vocab, out_path):
 def main():
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--reviews-gz", required=True,
-                        help="Amazon Reviews 2023 .jsonl or .jsonl.gz")
+    parser.add_argument("--reviews-gz", required=True, nargs="+",
+                        help="Amazon Reviews 2023 .jsonl or .jsonl.gz; with several, "
+                             "--per-class is sampled from each")
+    parser.add_argument("--base", metavar="JSONL",
+                        help="an existing {rating, text} corpus to keep as it is and add to")
+    parser.add_argument("--exclude", metavar="JSONL", nargs="*", default=[],
+                        help="{rating, text} files whose reviews must never be sampled, "
+                             "such as the test set")
     parser.add_argument("--vec", required=True,
                         help="fastText wiki-news-300d-1M.vec")
     parser.add_argument("--per-class", type=int, default=1000,
@@ -213,15 +225,32 @@ def main():
     reviews_out = os.path.join(args.out_dir, "TestData.jsonl")
     embeddings_out = os.path.join(args.out_dir, "WordEmbeddings.jsonl")
 
-    print(f"Sampling {args.per_class:,} reviews per class from {args.reviews_gz}")
-    reservoirs = sample_reviews(args.reviews_gz, args.per_class, args.seed)
+    def read_rows(path):
+        with open(path, encoding="utf-8") as f:
+            return [json.loads(line) for line in f if line.strip()]
 
-    short = [s for s, r in reservoirs.items() if len(r) < args.per_class]
-    if short:
-        print(f"\nWARNING: ratings {short} had fewer than {args.per_class} eligible "
-              f"reviews. The corpus is not perfectly balanced.")
+    rows = read_rows(args.base) if args.base else []
+    # Never sample a test review, or a review already in the corpus (the same text
+    # can be posted under more than one category).
+    skip = {normalise(row["text"]) for path in args.exclude for row in read_rows(path)}
+    skip.update(normalise(row["text"]) for row in rows)
+    if args.base:
+        print(f"Keeping {len(rows):,} reviews from {args.base}")
 
-    rows = write_reviews(reservoirs, reviews_out, args.seed)
+    for path in args.reviews_gz:
+        print(f"Sampling {args.per_class:,} reviews per class from {path}")
+        reservoirs = sample_reviews(path, args.per_class, args.seed, skip)
+
+        short = [s for s, r in reservoirs.items() if len(r) < args.per_class]
+        if short:
+            print(f"\nWARNING: ratings {short} had fewer than {args.per_class} eligible "
+                  f"reviews in {path}. The corpus is not perfectly balanced.")
+
+        for star, texts in reservoirs.items():
+            rows.extend({"rating": star, "text": text} for text in texts)
+            skip.update(normalise(text) for text in texts)
+
+    rows = write_reviews(rows, reviews_out, args.seed)
 
     vocab = corpus_vocabulary(rows)
     print(f"Corpus vocabulary: {len(vocab):,} distinct tokens")

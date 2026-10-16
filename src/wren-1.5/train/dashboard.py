@@ -375,3 +375,43 @@ def watch(workdir, interval=2.0):
                 live.update(render(read_status(workdir)))
     except KeyboardInterrupt:
         pass
+
+
+def demo(interval=0.5):
+    """ The watch panel fed by a fake three-seed run in a temporary folder, to show it off
+    without training. Never reads or writes a real workdir. """
+    import tempfile
+    import threading
+
+    seeds, batches = [0, 1, 2], 2000
+    rng = np.random.default_rng(0)
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as workdir:
+        dash = Dashboard(workdir, live=False)
+        dash.status["config"] = {"seeds": "0 1 2", "batches": f"{batches:,} x 32", "demo": "fake data"}
+        dash.start(seeds, batches, 32)
+
+        def fake_training():
+            champion = (None, -1.0)
+            for seed in seeds:
+                dash.start_seed(seed)
+                for number in range(50, batches + 1, 50):
+                    time.sleep(interval / 4)
+                    dash.batch(number)
+                    dash.status["loss"].append([number, 1.6 * np.exp(-number / 800) + 0.9
+                                                + rng.normal(0, 0.03)])
+                    if number % 500 == 0:
+                        dash.status["quick"].append([number, 0.35 + 0.1 * number / batches + rng.normal(0, 0.01),
+                                                     0.75 + 0.1 * number / batches])
+                    dash.write_status()
+                exact = 0.45 + rng.normal(0, 0.01)
+                if exact > champion[1]:
+                    champion = (seed, exact)
+                dash.seed_done({"seed": seed, "val_exact": exact, "val_within_one": exact + 0.35,
+                                "seconds": batches * interval / 200, "saved": champion[0] == seed}, *champion)
+            dash.finish()
+            while True:  # Windows skips a write while the watcher reads, so keep the last one coming
+                time.sleep(interval)
+                dash.write_status()
+
+        threading.Thread(target=fake_training, daemon=True).start()
+        watch(workdir, interval)

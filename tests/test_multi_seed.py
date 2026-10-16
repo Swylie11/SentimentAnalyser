@@ -77,6 +77,27 @@ def main():
         assert [r["saved"] for r in results["runs"]] == [True, True, False]
         print("pass  champion rule saves only when beaten, champion is seed 1")
 
+        # Test set evaluation after training: scored, saved to seed_runs.json, and one
+        # history line per training run.
+        test_path = os.path.join(workdir, "eval_test.jsonl")
+        history_path = os.path.join(workdir, "history.jsonl")
+        with open(test_path, "w", encoding="utf-8") as f:
+            for rating, text in ((1, "awful broken waste"), (5, "great product love it"), (3, "it is fine")):
+                f.write(json.dumps({"rating": rating, "text": text}) + "\n")
+        loop.evaluate = lambda *args: (0.5, 0.9, np.array([3, 3]), np.array([3, 4]))
+        for _ in range(2):
+            loop.train(BATCH_SIZE, NUM_BATCHES, assume_yes=True, seeds=[0],
+                       test_path=test_path, history_path=history_path)
+
+        with open(os.path.join(workdir, loop.SEED_RUNS_FILE), encoding="utf-8") as f:
+            test = json.load(f)["test"]
+        assert test["n"] == 3 and sum(test["prediction_counts"]) == 3, test
+        assert test["exact_ci"][0] <= test["exact"] <= test["exact_ci"][1], test
+        history = loop.read_history(history_path)
+        assert len(history) == 2 and history[0]["test"]["n"] == 3, history
+        assert history[0]["val_exact"] == {"0": 0.5}, history[0]["val_exact"]
+        print("pass  test set scored after training and appended to the history")
+
         com.set_db_dir(HERE)  # Closes the cached connections so the folder can be removed
     return 0
 

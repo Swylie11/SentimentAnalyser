@@ -20,6 +20,11 @@ class FilterBankLayer:
     main.py runs several of these in parallel over the same embedding input (one per
     region size) and concatenates their outputs, rather than stacking them. """
 
+    # Fraction of pooled features zeroed per training batch. Kim (2014) uses 0.5 on the
+    # concatenated features; dropping per branch is the same thing, since each feature
+    # is dropped independently.
+    dropout_rate = 0.5
+
     def __init__(self, layerNum, region_size, num_filters, embedding_dim=300):
         self.layerNum = layerNum
         self.region_size = region_size
@@ -38,7 +43,8 @@ class FilterBankLayer:
 
         self.inputs = None            # (batch, T, embedding_dim), kept for the backward gather
         self.argmax_positions = None  # (batch, num_filters) int, the winning word position per filter
-        self.output = None            # (batch, num_filters)
+        self.output = None            # (batch, num_filters), before dropout
+        self.dropout_mask = None      # (batch, num_filters), set only by a training pass
 
     def fetchKernel(self):
         kernel, bias = com.fetch_kernel(self.layerNum)
@@ -75,9 +81,10 @@ class FilterBankLayer:
         r, D = self.region_size, self.embedding_dim
         return sliding_window_view(batch, (r, D), axis=(1, 2))[:, :, 0, :, :]
 
-    def convPass(self, batch_input):
+    def convPass(self, batch_input, training=False):
         """ Correlates every filter against every word window, applies ReLU, then
-        globally max-pools over word position. Returns (batch, num_filters). """
+        globally max-pools over word position. Returns (batch, num_filters).
+        `training` applies inverted dropout to the pooled features. """
         batch = np.asarray(batch_input, dtype=float)
         self.inputs = batch
 
@@ -96,7 +103,13 @@ class FilterBankLayer:
         batch_indices = np.arange(batch_size)[:, None]
         filter_indices = np.arange(F)[None, :]
         self.output = activated[batch_indices, self.argmax_positions, filter_indices]
-        return self.output
+
+        if not training:
+            self.dropout_mask = None
+            return self.output
+        keep = 1 - self.dropout_rate
+        self.dropout_mask = (np.random.rand(*self.output.shape) < keep) / keep
+        return self.output * self.dropout_mask
 
     def backpropagate(self, dvalues, need_input_grad=False):
         """ dvalues: gradient wrt this branch's pooled output, shape (batch, num_filters).
@@ -107,6 +120,8 @@ class FilterBankLayer:
         main.py's training loop never needs it and skips the extra work; the gradient
         check exercises it to verify the routing is correct. """
         dvalues = np.asarray(dvalues, dtype=float)
+        if self.dropout_mask is not None:
+            dvalues = dvalues * self.dropout_mask  # Dropped features pass no gradient
         batch_size = self.inputs.shape[0]
         r, D, F = self.region_size, self.embedding_dim, self.num_filters
 
