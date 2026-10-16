@@ -1,4 +1,4 @@
-"""Checks the Analyser against the shipped Wren 1.0 files. Needs no database.
+"""Checks the Analyser against the shipped Wren 1.5 files (and that 1.0 still loads). Needs no database.
 
     python tests/test_predict.py        (or: pytest tests/test_predict.py)
 """
@@ -32,6 +32,12 @@ def test_input_shapes():
 def test_batching_does_not_change_results():
     texts = ["good value"] * 3 + ["broke after a week"] * 60  # spans two chunks
     assert analyser.predict(texts) == [analyser.predict(t) for t in texts]
+
+
+def test_wren10_still_loads():
+    old = Analyser(version="1.0")
+    assert old.predict("Total garbage, crashed and lost my work") == 1
+    assert len(old.dense) == 5 and len(analyser.dense) == 1
 
 
 if __name__ == "__main__":

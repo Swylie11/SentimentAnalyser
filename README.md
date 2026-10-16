@@ -13,16 +13,21 @@ work, and [the story of why](#what-was-wrong-originally) is at the bottom.
 
 ## Headline result
 
-Tested on 2,000 reviews it had never seen before:
+**Wren 1.5** (the default) against Wren 1.0, on the same 2,000 reviews from five product
+categories that neither model had ever seen:
 
-| | Wren | Random guessing |
-|---|---|---|
-| **Exact star rating** | **47.0%** (95% CI: 44.8–49.2%) | 20.0% |
-| **Within one star** | **86.2%** | 52.0% |
+| | Wren 1.5 | Wren 1.0 | Random guessing |
+|---|---|---|---|
+| **Exact star rating** | **52.5%** (95% CI: 50.3–54.7%) | 49.2% | 20.0% |
+| **Within one star** | **90.9%** | 87.9% | 52.0% |
+
+On the reviews where exactly one model is right, Wren 1.5 wins 253 to 188
+(McNemar exact test, p = 0.002), so the improvement is not noise. The sections below
+describe Wren 1.5; [How it got here](#how-it-got-here) covers 1.0 and what changed.
 
 > **What's a 95% CI?** A *confidence interval*. Because the test set is a sample, the
-> true accuracy could be a little higher or lower than 47.0%. The interval says we
-> can be 95% confident that the true figure lies between 44.8% and 49.2%.
+> true accuracy could be a little higher or lower than 52.5%. The interval says we
+> can be 95% confident that the true figure lies between 50.3% and 54.7%.
 
 This is a **modest result, not a state-of-the-art one**. The sections below say
 exactly what it is and what it is not.
@@ -58,10 +63,11 @@ pip install .                      # NumPy is the only dependency (use -e . to d
 pip install matplotlib             # only for the charts in tools/visualise.py
 ```
 
-The pretrained **Wren 1.0** files (about 31 MB, see [Pretrained weights](#pretrained-weights))
+The pretrained **Wren 1.5** files (about 51 MB, see [Pretrained weights](#pretrained-weights))
 are downloaded automatically the first time you use the model. They are saved to
 `~/.cache/wren`, or to `$WREN_HOME` if you set it. To download them in advance, run
-`wren fetch`.
+`wren fetch`. Wren 1.0 is still available: add `--model 1.0` to any command, or use
+`Analyser(version="1.0")` in Python.
 
 ### Use it from the command line
 
@@ -69,7 +75,8 @@ are downloaded automatically the first time you use the model. They are saved to
 wren predict "Does exactly what it says, works great"   # 5   Very positive
 wren predict "waste of money" --proba                    # the star, then P(1★) … P(5★)
 cat reviews.txt | wren predict - --json                  # one review per line, JSON output
-wren eval --data Data/eval_test.jsonl                    # exact and within-one accuracy
+wren eval --data Data/eval_test_multi.jsonl              # exact and within-one accuracy
+wren predict --model 1.0 "waste of money"                # the original Wren 1.0
 ```
 
 ### Use it from Python
@@ -110,8 +117,9 @@ review text
         5-word windows × 100 filters      each: correlate, + bias, ReLU,
                                                 global max-pool over position
   → join the three pooled outputs together                            (300)
-  → dense layers 300 → 256 → 128 → 64 → 32 → 16, ReLU throughout
-  → dense layer 16 → 5, softmax
+  → dropout 0.5 (training only)
+  → dense layer 300 → 256, ReLU, dropout 0.2 (training only)
+  → dense layer 256 → 5, softmax
   → categorical cross-entropy loss (training only)
 ```
 
@@ -163,11 +171,14 @@ Global max-pooling has two handy side effects:
 
 ### Step 3: Making a decision (the dense layers)
 
-The 300 phrase-detector scores are passed through a stack of **dense layers**
-(also called fully connected layers), in which every input is connected to every
-output. Five ReLU layers narrow the information down step by step
-(300 → 256 → 128 → 64 → 32 → 16). A final layer then produces five raw scores,
-called **logits**, one per star rating.
+The 300 phrase-detector scores are passed through **dense layers** (also called fully
+connected layers), in which every input is connected to every output. One ReLU layer
+of 256 neurons combines the phrase scores, and a final layer then produces five raw
+scores, called **logits**, one per star rating.
+
+Wren 1.0 had five hidden layers here (300 → 256 → 128 → 64 → 32 → 16). That deep,
+narrowing stack sat at chance-level loss for thousands of batches before it started
+learning, so 1.5 keeps only the first, widest layer.
 
 **Softmax** turns those five logits into five probabilities that add up to 100%.
 
@@ -184,27 +195,31 @@ rating using **categorical cross-entropy loss**. This number is small when the m
 gives high probability to the right answer and large when it doesn't.
 
 **Backpropagation** then works out, for every one of the model's parameters, which
-direction to nudge it to reduce the loss. The optimiser is plain **stochastic
-gradient descent (SGD)**: it takes a small step (learning rate 0.03) in that direction,
-using the average loss over a batch of reviews.
+direction to nudge it to reduce the loss, using the average loss over a batch of 32
+reviews. All of it is hand-written:
 
-It is deliberately bare-bones. There is:
+- **AdamW optimiser.** Each parameter gets its own step size, scaled by how large its
+  recent gradients have been, plus a momentum term. This is what got 1.5 past the
+  long stall that plain SGD (used by 1.0) suffered. Weight decay of 0.01 gently pulls
+  weights towards zero so no single one grows too large.
+- **Cosine learning-rate schedule.** The learning rate starts at 0.001 and eases down
+  to zero along a cosine curve, so training takes big steps early and fine ones at the end.
+- **Dropout.** During training, half of the 300 phrase scores and a fifth of the 256
+  hidden neurons are switched off at random on every batch. The model can't lean on
+  any single feature, which reduces overfitting. Dropout is off when predicting.
+- **Several seeds.** Training runs from more than one random starting point, and only
+  the run that scores best on 2,000 held-out validation reviews is kept.
 
-- no momentum
-- no dropout
-- no weight decay
-- no learning-rate schedule
-
-The model is checked against a quick validation score every 200 batches, and the
-best-scoring version (*checkpoint*) is restored at the end of training.
+Within each run, the model is checked on 1,000 of those validation reviews every 500
+batches, and the best-scoring version (*checkpoint*) is restored at the end.
 
 ### Model size
 
 | Part | Trainable parameters |
 |---|---|
 | Filter banks | 360,300 |
-| Dense layers | 120,901 |
-| **Total** | **about 481,000** |
+| Dense layers | 78,341 |
+| **Total** | **about 439,000** |
 | Word embeddings | not trained (frozen) |
 
 ### What the model *cannot* do
@@ -215,8 +230,8 @@ best-scoring version (*checkpoint*) is restored at the end of training.
   negation over a longer span (e.g. *"I expected to hate it, but… no"*), and it has
   no notion of sarcasm.
 - A word with no embedding is read as a **row of zeros**, which carries no meaning.
-  This affects about 1% of the words in the training and test reviews, mostly typos
-  and words glued together such as `itbr`.
+  Wren 1.5 knows 65,726 words: those in its training reviews that fastText has a
+  vector for. Typos, glued words such as `itbr` and anything rarer come out as zeros.
 
 ---
 
@@ -226,25 +241,43 @@ best-scoring version (*checkpoint*) is restored at the end of training.
 
 | | |
 |---|---|
-| **Data** | 100,000 Amazon *Software* reviews, balanced at 20,000 per star rating |
-| **Split** | 98,000 for training, 2,000 held back for validation |
-| **Training length** | 15,000 batches of 32 reviews, about 4.9 passes over the data |
-| **Time** | 70 minutes on a CPU |
+| **Data** | 577,500 Amazon reviews from five categories (Software, Video Games, Musical Instruments, Office Products, Toys and Games), balanced at 115,500 per star rating |
+| **Split** | 575,500 for training, 2,000 held back for validation |
+| **Training length** | 45,000 batches of 32 reviews, about 2.5 passes over the data, two seeds |
+| **Time** | about 3 hours 50 minutes per seed on a CPU |
 
-All figures below come from `evaluation/evaluate.py`, run on the same trained weights.
+The test set is `Data/eval_test_multi.jsonl`: 2,000 reviews from the same five
+categories, 400 per star rating, none of them in either model's training data. The
+figures below come from `evaluation/mcnemar.py`, which runs Wren 1.0 and Wren 1.5 on
+exactly the same reviews.
 
 ### Accuracy
 
 | Data set | Reviews | Exact | Within one star |
 |---|---|---|---|
-| **Fresh test set** (never trained on, never used to pick the model) | 2,000 | **47.0%** (44.8–49.2) | **86.2%** (84.6–87.6) |
-| Training slice (reviews it *did* train on) | 2,000 | 59.3% | 93.4% |
-| Validation, first 300 (used to pick the checkpoint) | 300 | 55.7% | 91.0% |
-| Validation, remaining | 1,700 | 52.1% | 89.5% |
+| **Fresh test set, Wren 1.5** (never trained on, never used to pick the model) | 2,000 | **52.5%** (50.3–54.7) | **90.9%** (89.6–92.1) |
+| Fresh test set, Wren 1.0 | 2,000 | 49.2% | 87.9% |
+| Validation, Wren 1.5 (used to pick the seed and checkpoint) | 2,000 | 57.0% | 90.9% |
 | Uniform random guessing | | 20.0% | 52.0% |
 
-**Use the fresh test set figure (47.0%) when quoting this model.** The section on
+**Use the fresh test set figure (52.5%) when quoting this model.** The section on
 [how much to trust these numbers](#how-much-to-trust-these-numbers) explains why.
+
+#### Is 1.5 really better, or is it noise?
+
+The two confidence intervals overlap, but that's the wrong test here: both models
+answered the *same* 2,000 reviews, so they can be compared review by review.
+**McNemar's test** does exactly that. It ignores the reviews both models got right
+(797) or both got wrong (762) and looks only at the ones where they disagree:
+
+| | Count |
+|---|---|
+| Only Wren 1.0 right | 188 |
+| Only Wren 1.5 right | 253 |
+
+If the two models were equally good, those 441 disagreements would split roughly 50/50.
+A 253 to 188 split happens by chance with probability **p = 0.0023** (exact two-sided
+test), so the improvement is real.
 
 ### Which ratings are easy, and which are hard
 
@@ -252,12 +285,13 @@ All figures below come from `evaluation/evaluate.py`, run on the same trained we
 
 | True rating | 1★ | 2★ | 3★ | 4★ | 5★ |
 |---|---|---|---|---|---|
-| Recall (fresh test set) | 68.5% | 26.2% | 34.0% | 42.5% | 63.7% |
+| Recall, Wren 1.5 | 61.8% | 47.0% | 43.8% | 37.5% | 72.5% |
+| Recall, Wren 1.0 | 68.0% | 27.8% | 42.5% | 47.2% | 60.8% |
 
-The extreme ratings are much easier than the middle ones. Strong love or hate
+The extreme ratings are still much easier than the middle ones. Strong love or hate
 uses distinctive language, while 2★, 3★ and 4★ reviews often mix praise and
-complaint. In fact, 2★ reviews are mistaken for 1★ or 3★ more often than they are
-correctly identified.
+complaint. Wren 1.5 gained most on 2★ (+19 points) and 5★ (+12), but lost ground on
+1★ (−6) and 4★ (−10): it now calls more 1★ reviews 2★, and more 4★ reviews 3★ or 5★.
 
 #### Confusion matrix
 
@@ -267,50 +301,40 @@ bottom-right) holds the correct answers. Everything else is a mistake, and mista
 close to the diagonal are near misses.
 
 ```
-Fresh test set (rows = true stars, columns = predicted stars)
+Wren 1.5, fresh test set (rows = true stars, columns = predicted stars)
 
             pred 1★  pred 2★  pred 3★  pred 4★  pred 5★
-  true 1★ |   274       71       37       11        7
-  true 2★ |   137      105      122       28        8
-  true 3★ |    74       68      136       98       24
-  true 4★ |    13       25       90      170      102
-  true 5★ |    14       12       24       95      255
+  true 1★ |   247      124       23        1        5
+  true 2★ |   103      188       94       10        5
+  true 3★ |    32      118      175       54       21
+  true 4★ |     5       33      102      150      110
+  true 5★ |    10       11       26       63      290
 ```
 
-Reading the 2★ row, for example: of 400 two-star reviews, only 105 were predicted
-correctly. 137 were called 1★ and 122 were called 3★.
+Reading the 4★ row, for example: of 400 four-star reviews, 150 were predicted
+correctly. 102 were called 3★ and 110 were called 5★. Almost every mistake is a near
+miss: only 6 of the 400 one-star reviews were called 4★ or 5★.
 
 ### How much to trust these numbers
 
 **✅ The test set is clean.**
 `evaluation/build_test_set.py` draws new reviews from the full dataset and throws away
-any whose text appears in the training data. The result has 0 exact matches and only
-4 near-duplicates with the training data. (A near-duplicate is a pair of reviews whose
-5-word chunks overlap by 80% or more, measured by *5-word-shingle Jaccard similarity*
-≥ 0.8.)
+any whose text appears in the training data. `evaluation/mcnemar.py` checks again
+against both models' training reviews and finds 0 exact matches.
 
-**⚠️ The training log said 52.6%, and that was optimistic.** There are three reasons:
+**⚠️ The validation figure (57.0%) is optimistic.** The same 2,000 validation reviews
+picked the best checkpoint within each run and then the best of the two seeds, and
+picking the best model on a set flatters that set. The 4.5-point gap to the fresh test
+set is in line with Wren 1.0's. The test set was used once, after training finished,
+and never to choose anything.
 
-1. **The checkpoint was chosen using the first 300 validation reviews.** Picking the
-   best model on a set flatters that set. Here those 300 scored 3.6 points higher
-   than the other 1,700. That gap is within noise, but it points the wrong way.
-2. **The validation set contains 21 exact copies of training reviews** (about 1%).
-3. **There is a significant 5-point gap** between the other 1,700 validation reviews
-   and the fresh test set. The most likely cause is that validation reviews share
-   products or reviewers with the training reviews, while the fresh test set mostly
-   doesn't. That can't be checked, because the database stores only the rating and
-   the text.
+**ℹ️ Two seeds landed close together.** The two training runs scored 56.95% and
+56.35% on validation, so the result doesn't depend on a lucky starting point.
 
-**⚠️ There is a real generalisation gap.** The model scores 12.3 points higher on
-reviews it trained on than on fresh ones. That difference is far too large to be
-chance (a *z-score* of 7.8; anything above about 2 is usually treated as significant).
-The model isn't simply memorising the training set, but it is moderately
-**overfitting**: it has learned some quirks of its training data that don't carry
-over to new reviews. That's to be expected with no regularisation (techniques like
-dropout or weight decay that discourage overfitting).
-
-**ℹ️ About 0.7% of the training corpus is repeated text.** The raw dataset contains
-duplicate reviews, and the corpus was not deduplicated.
+**ℹ️ Some of the gain may come from the data rather than the model.** Wren 1.0 was
+trained only on Software reviews, while the test set spans five categories that 1.5
+trained on. 1.5 was not scored on 1.0's Software-only test set, because that set was
+only checked against 1.0's training data and may overlap 1.5's.
 
 ### How it got here
 
@@ -318,7 +342,14 @@ duplicate reviews, and the corpus was not deduplicated.
 |---|---|---|
 | Original A-Level submission | chance level | The backward pass was disconnected ([see below](#what-was-wrong-originally)). |
 | After the backpropagation fixes: 5,000 reviews, two stacked convolutions | 22.4% | No better than always guessing the same rating (21.1%). |
-| Filter bank CNN, 98,000 reviews | **47.0%** | Today's model. |
+| Wren 1.0: filter bank CNN, 98,000 Software reviews | 47.0% (Software test set), 49.2% (five-category test set) | Plain SGD, five hidden layers, no regularisation. |
+| **Wren 1.5**: 575,500 reviews from five categories | **52.5%** (five-category test set) | AdamW, cosine schedule, one hidden layer, dropout. Today's model. |
+
+Between 1.0 and 1.5, four things changed: about 5.9 times more training data from five
+categories instead of one, AdamW with a cosine schedule instead of SGD, one hidden
+layer instead of five, and dropout plus weight decay. Wren 1.0 scored 12.3 points
+higher on its training reviews than on fresh ones; regularisation was the first item
+on the list of next steps.
 
 Three things changed between 22.4% and 47.0%:
 
@@ -328,8 +359,6 @@ Three things changed between 22.4% and 47.0%:
 2. **The amount of data.** The training data grew from 3,000 reviews to 98,000.
 3. **Curly apostrophes.** These are now normalised, so words like `don’t` can be found
    in the embedding table.
-
-Regularisation has not been tried yet.
 
 ---
 
@@ -352,16 +381,18 @@ These aren't in the repository. `wren setup` builds them.
 You need two source files, and neither is in the repository.
 
 **1. The reviews.** These come from the *Amazon Reviews 2023* dataset from the McAuley
-Lab at UCSD. The Software category is a 496 MB gzip file containing 4.88 million
-reviews:
+Lab at UCSD, one gzip file per category. Wren 1.5 uses five (the Software file alone is
+496 MB and holds 4.88 million reviews):
 
 ```bash
-curl -L -o Data/Software.jsonl.gz \
-  https://mcauleylab.ucsd.edu/public_datasets/data/amazon_2023/raw/review_categories/Software.jsonl.gz
+for c in Software Video_Games Musical_Instruments Office_Products Toys_and_Games; do
+  curl -L -o Data/$c.jsonl.gz \
+    https://mcauleylab.ucsd.edu/public_datasets/data/amazon_2023/raw/review_categories/$c.jsonl.gz
+done
 ```
 
 **2. The word embeddings.** You need fastText `wiki-news-300d-1M.vec` (999,994 words,
-300 numbers each). The shipped Wren 1.0 weights were trained with these exact vectors
+300 numbers each). The shipped Wren weights were trained with these exact vectors
 and **will only work with them**, so don't substitute GloVe or another fastText file.
 
 ```bash
@@ -371,13 +402,24 @@ unzip -j Data/wiki-news-300d-1M.vec.zip -d Data/
 
 **3. Build the `.jsonl` files and the databases:**
 
+Wren 1.5's code lives in `src/wren-1.5` and runs through `tools/wren15.py` (the
+installed `wren train` still trains the 1.0 architecture). From the repo root:
+
 ```bash
-python -m wren.train.real_data_setup --reviews-gz Data/Software.jsonl.gz \
-                                     --vec        Data/wiki-news-300d-1M.vec \
-                                     --per-class  20000 \
-                                     --out-dir    Data
-wren setup --reviews Data/TestData.jsonl --embeddings Data/WordEmbeddings.jsonl
+python tools/wren15.py data --reviews-gz Data/Software.jsonl.gz Data/Video_Games.jsonl.gz \
+                                         Data/Musical_Instruments.jsonl.gz Data/Office_Products.jsonl.gz \
+                                         Data/Toys_and_Games.jsonl.gz \
+                            --vec        Data/wiki-news-300d-1M.vec \
+                            --per-class  20000 \
+                            --exclude    Data/eval_test_multi.jsonl \
+                            --out-dir    Data/multi
+python tools/wren15.py setup --workdir wren-work \
+                             --reviews Data/multi/TestData.jsonl --embeddings Data/multi/WordEmbeddings.jsonl
 ```
+
+`--per-class` is sampled from each file, so this gives 5 × 5 × 20,000 = 500,000 reviews.
+`--base FILE` keeps an existing corpus and adds to it, and `--exclude` makes sure the
+test set's reviews are never sampled.
 
 #### How `real_data_setup.py` keeps the results honest
 
@@ -416,8 +458,14 @@ wren setup --synthetic 3000
 ### Run training
 
 ```bash
-wren train --batches 15000 --batch-size 32       # add --yes to skip the confirmation
+python tools/wren15.py train --workdir wren-work --batches 45000 --seeds 0 1   # add --yes to skip the confirmation
+python tools/wren15.py watch --workdir wren-work                               # live stats, in a second window
 ```
+
+`bash tools/train.sh` does the whole thing unattended (data, databases, multi-seed
+training) and keeps Windows awake while it runs. When training ends, the saved model
+is scored once on `Data/eval_test_multi.jsonl` and the run is appended to
+`evaluation/wren15_history.jsonl`. `wren train` still trains the Wren 1.0 architecture.
 
 > **⚠️ Training overwrites the existing model.** It resets every weight and filter,
 > which destroys whatever model was in the work directory. To protect you, it asks
@@ -425,7 +473,7 @@ wren train --batches 15000 --batch-size 32       # add --yes to skip the confirm
 > and `convolution_layers.db` before changing them.
 
 A trained model lives in those databases. To use it with `Analyser`, export it with
-`tools/export_model.py` (see [Pretrained weights](#pretrained-weights)).
+`tools/export_wren15.py` (see [Pretrained weights](#pretrained-weights)).
 
 #### What training reports
 
@@ -448,25 +496,29 @@ fixed random seed), so it is identical on every run.
 
 ## Pretrained weights
 
-`tools/export_model.py` exports Wren 1.0 as two portable files in `models/wren-1.0/`:
+Each release is two portable files, published as assets on the matching GitHub release
+rather than committed to the repository. `wren` downloads the ones it needs and checks
+their sha256.
 
-| File | Contents |
-|---|---|
-| `wren-1.0-weights.npz` | The filter bank and dense layer parameters |
-| `wren-1.0-embeddings.npz` | The fastText vectors for the 37,498 words Wren knows |
+| Release | File | Contents |
+|---|---|---|
+| `v1.5` (default) | `wren-1.5-weights.npz` | The filter bank and dense layer parameters (3.4 MB) |
+| | `wren-1.5-embeddings.npz` | The fastText vectors for the 65,726 words Wren 1.5 knows (47.6 MB) |
+| `v1.0` | `wren-1.0-weights.npz` | The filter bank and dense layer parameters (3.7 MB) |
+| | `wren-1.0-embeddings.npz` | The fastText vectors for the 37,498 words Wren 1.0 knows (27.4 MB) |
 
-These files are published as release assets rather than committed to the repository.
-Their sizes and checksums are in `models/wren-1.0/MODEL.md`.
+Checksums and full details are in `models/wren-1.5/MODEL.md` and `models/wren-1.0/MODEL.md`.
 
 To export your own trained model:
 
 ```bash
-python tools/export_model.py --sentiment-dir <work dir with the trained .db files>
-                             # also needs Data/wiki-news-300d-1M.vec
+python evaluation/mcnemar.py --wren15 <work dir>    # first: the reference predictions
+python tools/export_wren15.py --workdir <work dir>  # Wren 1.5 architecture
+python tools/export_model.py --sentiment-dir <work dir>   # Wren 1.0 architecture; needs Data/wiki-news-300d-1M.vec
 ```
 
-As a safety check, the script runs the 2,000 test reviews through both the databases
-and the exported files. It stops unless both give the same probabilities.
+As a safety check, both scripts run the 2,000 test reviews through the databases and
+the exported files, and stop unless they give the same answers.
 
 ---
 
@@ -500,7 +552,7 @@ chain rule is the calculus rule that backpropagation is built on.)
 ```bash
 python tests/test_gradients.py              # dense layers
 python tests/test_filterbank_gradients.py   # filter bank layers
-python tests/test_predict.py                # Analyser on the shipped Wren 1.0 files
+python tests/test_predict.py                # Analyser on the shipped Wren 1.5 and 1.0 files
 ```
 
 None of these need a database or any data.
@@ -538,8 +590,14 @@ The `evaluation/` folder measures the saved model honestly. See
 `evaluation/README.md` for how to read the report.
 
 ```bash
+# Wren 1.0's test set (Software only)
 python evaluation/build_test_set.py --reviews-gz Data/Software.jsonl.gz
-python evaluation/evaluate.py
+# Wren 1.5's test set: the same five categories as the training corpus
+python evaluation/build_test_set.py --reviews-gz Data/Software.jsonl.gz Data/Video_Games.jsonl.gz \
+    Data/Musical_Instruments.jsonl.gz Data/Office_Products.jsonl.gz Data/Toys_and_Games.jsonl.gz \
+    --db wren-work-multi/test_data.db --out Data/eval_test_multi.jsonl
+python evaluation/evaluate.py                  # the detailed report for a Wren 1.0 work directory
+python evaluation/mcnemar.py                   # Wren 1.0 vs 1.5 on the same reviews, with McNemar's test
 python evaluation/tests/test_evaluation.py     # quick checks, no real data needed
 ```
 
@@ -548,9 +606,12 @@ python evaluation/tests/test_evaluation.py     # quick checks, no real data need
 ## Repository layout
 
 ```
-src/wren/      the package: Analyser (model.py), the CLI (cli.py), text cleaning,
-               layers/, and train/ (training loop, database setup, data builder)
-tools/         export_model.py: turns the databases into the portable Wren 1.0 files
+src/wren/      the package: Analyser (model.py, loads 1.5 or 1.0), the CLI (cli.py),
+               text cleaning, layers/, and train/ (the Wren 1.0 training code)
+src/wren-1.5/  Wren 1.5's training code: AdamW, dropout, multi-seed runs, live dashboard
+tools/         wren15.py: runs the Wren 1.5 training code; train.sh: unattended training
+               export_model.py / export_wren15.py: turn the databases into the portable
+               Wren 1.0 / 1.5 files
                visualise.py: charts of results and training runs (needs matplotlib)
 docs/          PLAN.md, the packaging plan
 tests/         gradient checks, the overfit test, and prediction checks
@@ -563,15 +624,15 @@ evaluation/    fresh test set builder, evaluation script, and logs of the traini
 
 These are listed roughly in order of how likely they are to help:
 
-1. **Add regularisation.** Try dropout or weight decay, and stop training based on a
-   validation set that isn't also used to produce the final reported number. The
-   12-point gap between training and test accuracy says this is the first thing to try.
-2. **Deduplicate the training corpus**, and split the data by product or reviewer
+1. **Fix 1★ and 4★.** Wren 1.5 lost 6 and 10 points of recall on these while gaining
+   on 2★ and 5★. The middle ratings are still the weak spot (38 to 47% recall).
+2. **Merge the two code bases**, so `wren train` trains the 1.5 architecture and
+   `src/wren-1.5` can go.
+3. **Deduplicate the training corpus**, and split the data by product or reviewer
    rather than by individual review. That way validation can't share products with
    training.
-3. **Add more filters or more window sizes**, and let the model train the embeddings.
-4. **Improve the middle ratings**, where recall is only 26 to 42%.
-5. **Speed up the training loop**, so each experiment isn't a 70-minute wait.
+4. **Add more filters or more window sizes**, and let the model train the embeddings.
+5. **Speed up the training loop**, so each experiment isn't a four-hour wait per seed.
 
 ---
 
@@ -622,7 +683,7 @@ reviews took it to 47.0%.
 - **Code:** MIT licensed (see `LICENSE`).
 - **Word vectors:** fastText `wiki-news-300d-1M` by Mikolov, Grave, Bojanowski, Puhrsch
   and Joulin, *Advances in Pre-Training Distributed Word Representations* (LREC 2018),
-  licensed CC BY-SA 3.0. `wren-1.0-embeddings.npz` is a subset of those vectors and is
-  distributed under the same licence.
+  licensed CC BY-SA 3.0. `wren-1.5-embeddings.npz` and `wren-1.0-embeddings.npz` are
+  subsets of those vectors and are distributed under the same licence.
 - **Training reviews:** Amazon Reviews 2023 (McAuley Lab, UCSD), published for research
   use. Check its terms before using the weights commercially.

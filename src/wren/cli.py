@@ -10,7 +10,7 @@ def predict(args):
     texts = args.text
     if texts == ["-"]:
         texts = [line.rstrip("\n") for line in sys.stdin if line.strip()]
-    analyser = Analyser()
+    analyser = Analyser(version=args.model)
     probabilities = analyser.predict_proba(texts)
     for text, row in zip(texts, probabilities):
         stars = int(row.argmax()) + 1
@@ -29,7 +29,7 @@ def evaluate(args):
     with open(args.data, encoding="utf-8") as f:
         records = [json.loads(line) for line in f if line.strip()]
     labels = np.array([int(r["rating"]) for r in records])
-    predictions = np.array(Analyser().predict([r["text"] for r in records]))
+    predictions = np.array(Analyser(version=args.model).predict([r["text"] for r in records]))
     print(f"{len(labels)} reviews")
     print(f"  Exact accuracy  : {100 * np.mean(predictions == labels):.1f}%")
     print(f"  Within one star : {100 * np.mean(abs(predictions - labels) <= 1):.1f}%")
@@ -37,7 +37,7 @@ def evaluate(args):
 
 def fetch(args):
     from . import store
-    for path in store.ensure():
+    for path in store.ensure(args.model):
         print(path)
 
 
@@ -56,20 +56,25 @@ def train(args):
 
 
 def main(argv=None):
+    from .store import DEFAULT, FILES
+    model = argparse.ArgumentParser(add_help=False)
+    model.add_argument("--model", choices=list(FILES), default=DEFAULT,
+                       help=f"which released Wren to use (default {DEFAULT})")
+
     parser = argparse.ArgumentParser(prog="wren", description="Five-class star-rating sentiment analyser.")
     sub = parser.add_subparsers(dest="command", required=True)
 
-    p = sub.add_parser("predict", help="rate review text from 1 to 5 stars")
+    p = sub.add_parser("predict", parents=[model], help="rate review text from 1 to 5 stars")
     p.add_argument("text", nargs="+", help='review text, or "-" to read one review per line from stdin')
     p.add_argument("--proba", action="store_true", help="also print the probability of each star")
     p.add_argument("--json", action="store_true", help="one JSON object per review")
     p.set_defaults(run=predict)
 
-    p = sub.add_parser("eval", help="accuracy on a .jsonl file of {rating, text} reviews")
+    p = sub.add_parser("eval", parents=[model], help="accuracy on a .jsonl file of {rating, text} reviews")
     p.add_argument("--data", required=True)
     p.set_defaults(run=evaluate)
 
-    p = sub.add_parser("fetch", help="download the Wren 1.0 files now instead of on first use")
+    p = sub.add_parser("fetch", parents=[model], help="download a model's files now instead of on first use")
     p.set_defaults(run=fetch)
 
     p = sub.add_parser("setup", help="build the training databases (training only)")

@@ -17,4 +17,8 @@ spec.loader.exec_module(module)
 from wren15 import cli  # noqa: E402
 
 if __name__ == "__main__":
+    if sys.argv[1:2] == ["data"]:  # the corpus builder, train/real_data_setup.py
+        from wren15.train import real_data_setup
+        sys.argv = [sys.argv[0] + " data"] + sys.argv[2:]
+        sys.exit(real_data_setup.main())
     sys.exit(cli.main())
