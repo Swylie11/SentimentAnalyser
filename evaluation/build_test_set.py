@@ -69,12 +69,14 @@ def select_fresh(reservoirs, known, per_class, seed):
 def main():
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--reviews-gz", default=os.path.join(REPO, "Data", "Software.jsonl.gz"))
+    parser.add_argument("--reviews-gz", nargs="+", default=[os.path.join(REPO, "Data", "Software.jsonl.gz")],
+                        help="One or more Amazon dumps; --per-class is split evenly across them, "
+                             "so pass the same categories the training corpus used")
     parser.add_argument("--db", default=os.path.join(REPO, "sentiment", "test_data.db"),
                         help="Training database whose reviews must be excluded (read only)")
     parser.add_argument("--out", default=os.path.join(REPO, "Data", "eval_test.jsonl"))
     parser.add_argument("--per-class", type=int, default=400,
-                        help="Reviews per star rating (default 400, so 2,000 in total)")
+                        help="Reviews per star rating across all files (default 400, so 2,000 in total)")
     parser.add_argument("--oversample", type=int, default=4,
                         help="Candidates drawn per kept review, to survive the exclusions")
     parser.add_argument("--seed", type=int, default=1,
@@ -88,9 +90,23 @@ def main():
     known = known_texts(args.db)
     print(f"{len(known):,} distinct training reviews will be excluded.")
 
-    print(f"Sampling candidates from {args.reviews_gz}")
-    reservoirs = rds.sample_reviews(args.reviews_gz, args.per_class * args.oversample, args.seed)
-    chosen, dropped = select_fresh(reservoirs, known, args.per_class, args.seed)
+    if args.per_class % len(args.reviews_gz):
+        parser.error(f"--per-class {args.per_class} does not split evenly over "
+                     f"{len(args.reviews_gz)} files")
+    per_file = args.per_class // len(args.reviews_gz)
+
+    chosen = {}
+    dropped = {"in_training": 0, "repeated": 0}
+    for path in args.reviews_gz:
+        print(f"Sampling candidates from {path}")
+        reservoirs = rds.sample_reviews(path, per_file * args.oversample, args.seed)
+        picked, d = select_fresh(reservoirs, known, per_file, args.seed)
+        for star, texts in picked.items():
+            chosen.setdefault(star, []).extend(texts)
+            # The same text can be posted under several categories.
+            known.update(normalise(t) for t in texts)
+        for k in dropped:
+            dropped[k] += d[k]
 
     short = [star for star, texts in chosen.items() if len(texts) < args.per_class]
     if short:
@@ -102,7 +118,7 @@ def main():
 
     manifest = {
         "seed": args.seed,
-        "source": os.path.basename(args.reviews_gz),
+        "source": [os.path.basename(p) for p in args.reviews_gz],
         "per_class_requested": args.per_class,
         "per_class_kept": {str(star): len(texts) for star, texts in chosen.items()},
         "total": len(rows),

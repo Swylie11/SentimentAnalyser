@@ -3,7 +3,7 @@
 import numpy as np
 
 from . import store, text
-from .config import FILTER_BANK_CONFIG, NUM_DENSE, SENTIMENT_LABELS
+from .config import FILTER_BANK_CONFIG, SENTIMENT_LABELS
 from .layers.filter_bank import FilterBankLayer
 from .layers.neural import NeuralLayer
 
@@ -31,17 +31,20 @@ def forward_pass(conv_layers, dense_layers, output_layer, texts, lookup):
 
 
 class Analyser:
-    """A trained Wren model. With no arguments it loads Wren 1.0 (downloading it on first use)."""
+    """A trained Wren model. With no arguments it loads Wren 1.5 (downloading it on first
+    use); `version="1.0"` loads the original release."""
 
-    def __init__(self, weights=None, embeddings=None):
+    def __init__(self, weights=None, embeddings=None, version=store.DEFAULT):
         if weights is None or embeddings is None:
-            default_weights, default_embeddings = store.ensure()
+            default_weights, default_embeddings = store.ensure(version)
             weights = weights or default_weights
             embeddings = embeddings or default_embeddings
 
         with np.load(weights) as w:
             self.conv = [FilterBankLayer(n, r, f) for n, r, f in FILTER_BANK_CONFIG]
-            dense = [NeuralLayer(n) for n in range(1, NUM_DENSE + 1)]
+            # Counted from the file, so 1.0's six dense layers and 1.5's two both load.
+            num_dense = sum(1 for key in w.files if key.startswith("dense") and key.endswith("_weights"))
+            dense = [NeuralLayer(n) for n in range(1, num_dense + 1)]
             for layer in self.conv:
                 layer.kernel = w[f"conv{layer.layerNum}_kernel"]
                 layer.bias = w[f"conv{layer.layerNum}_bias"]

@@ -19,3 +19,11 @@ wren-work/
 build/
 *.egg-info/
 charts/
+
+# In-house research (specs, notes); only released model files get tracked.
+models/kestrel/
+models/wren-1.5/*
+!models/wren-1.5/MODEL.md
+
+# Personal feature specs / notes.
+specs/

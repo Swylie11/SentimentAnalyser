@@ -1,0 +1,3 @@
+numpy>=1.24
+matplotlib>=3.5  # tools/visualise.py charts
+rich>=13  # training dashboard and `watch`
