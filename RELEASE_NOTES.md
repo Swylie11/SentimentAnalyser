@@ -48,7 +48,7 @@ Both files must keep these exact names, because `wren` downloads them from this 
 - Words outside its 65,726-word vocabulary are read as zeros.
 - It has no notion of sarcasm or of negation beyond 3 to 5 word windows.
 
-Full details: `models/wren-1.5/MODEL.md`.
+Full details: `releases/wren/1.5/MODEL.md`.
 
 ---
 
@@ -91,4 +91,4 @@ Both files must keep these exact names, because `wren` downloads them from this 
 - Words outside the 37,498-word vocabulary are read as zeros.
 - It has no notion of sarcasm or of negation beyond 3 to 5 word windows.
 
-The full description, the breakdown by star rating and the training history are in the README and `models/wren-1.0/MODEL.md`.
+The full description, the breakdown by star rating and the training history are in the README and `releases/wren/1.0/MODEL.md`.

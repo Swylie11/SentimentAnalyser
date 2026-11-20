@@ -8,7 +8,7 @@
   python tools/visualise.py review "Great, but broke after a week"   # star probabilities
   python tools/visualise.py words "Great, but broke after a week"    # which words drive the score
 
-PNGs land in ./charts (override with --out).
+PNGs land in ./docs/charts (override with --out).
 """
 import argparse
 import json
@@ -29,7 +29,7 @@ def results():
 
 
 def analyser():
-    from wren import Analyser
+    from cadello import Analyser
     return Analyser()
 
 
@@ -94,7 +94,7 @@ def training(args):
 
 def seeds(args):
     """Multi-seed run: every seed's validation curve, the kept one highlighted."""
-    path = args.file or os.path.join(os.environ.get("WREN_WORKDIR", "wren-work"), "seed_runs.json")
+    path = args.file or os.path.join(os.environ.get("CADELLO_WORKDIR") or os.environ.get("WREN_WORKDIR") or "runs/wren-work", "seed_runs.json")
     with open(path, encoding="utf-8") as f:
         log = json.load(f)
     runs = log["runs"]
@@ -134,7 +134,7 @@ def loss(args):
 
     MP4 if ffmpeg is on PATH, otherwise GIF. Also writes the final frame as a PNG."""
     from matplotlib import animation
-    path = args.file or os.path.join(os.environ.get("WREN_WORKDIR", "wren-work"), "seed_runs.json")
+    path = args.file or os.path.join(os.environ.get("CADELLO_WORKDIR") or os.environ.get("WREN_WORKDIR") or "runs/wren-work", "seed_runs.json")
     with open(path, encoding="utf-8") as f:
         log = json.load(f)
     seed = log["champion_seed"] if args.seed is None else args.seed
@@ -215,15 +215,15 @@ def words(args):
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
-    ap.add_argument("--out", default="charts")
+    ap.add_argument("--out", default="docs/charts")
     sub = ap.add_subparsers(dest="cmd", required=True)
     for fn in (confusion, recall, training):
         sub.add_parser(fn.__name__).set_defaults(fn=fn)
     s = sub.add_parser("seeds")
-    s.add_argument("--file", help="seed_runs.json (default $WREN_WORKDIR or ./wren-work)")
+    s.add_argument("--file", help="seed_runs.json (default $CADELLO_WORKDIR or ./runs/wren-work)")
     s.set_defaults(fn=seeds)
     s = sub.add_parser("loss")
-    s.add_argument("--file", help="seed_runs.json (default $WREN_WORKDIR or ./wren-work)")
+    s.add_argument("--file", help="seed_runs.json (default $CADELLO_WORKDIR or ./runs/wren-work)")
     s.add_argument("--seed", type=int, help="which run to plot (default: the kept champion)")
     s.add_argument("--seconds", type=int, default=10, help="length of the drawing animation")
     s.add_argument("--fps", type=int, default=30)

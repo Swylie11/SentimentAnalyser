@@ -5,7 +5,7 @@
 
 import numpy as np
 
-from wren import Analyser
+from cadello import Analyser
 
 analyser = Analyser()
 
@@ -35,9 +35,17 @@ def test_batching_does_not_change_results():
 
 
 def test_wren10_still_loads():
-    old = Analyser(version="1.0")
+    old = Analyser("wren-1.0")
     assert old.predict("Total garbage, crashed and lost my work") == 1
     assert len(old.dense) == 5 and len(analyser.dense) == 1
+
+
+def test_names_and_aliases_load_the_same_model():
+    assert analyser.name == "wren-1.5"
+    for name in ("wren-1.0", "1.0"):
+        assert Analyser(name).name == "wren-1.0"
+    assert Analyser(version="1.0").name == "wren-1.0"  # the keyword Wren used
+    assert Analyser(model="wren").name == "wren-1.5"
 
 
 if __name__ == "__main__":

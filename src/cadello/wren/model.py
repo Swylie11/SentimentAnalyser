@@ -1,11 +1,14 @@
-"""Inference: `Analyser().predict("great product")` -> 1..5 stars."""
+"""Wren inference: `Analyser("wren-1.5").predict("great product")` -> 1..5 stars."""
 
 import numpy as np
 
-from . import store, text
-from .config import FILTER_BANK_CONFIG, SENTIMENT_LABELS
+from . import text
+from .config import FILTER_BANK_CONFIG
 from .layers.filter_bank import FilterBankLayer
 from .layers.neural import NeuralLayer
+from .. import store
+from ..analyser import Analyser
+from ..registry import resolve
 
 # Reviews per forward pass. Each review is a 200x300 embedding matrix, so a long
 # list would not fit in memory at once.
@@ -34,12 +37,19 @@ def forward_pass(conv_layers, dense_layers, output_layer, texts, lookup, trainin
     return output_layer.softmax(activations)[1]
 
 
-class Analyser:
-    """A trained Wren model. With no arguments it loads Wren 1.0 (downloading it on first use)."""
+class WrenAnalyser(Analyser):
+    """A trained Wren model. `model` names a release ("wren-1.5", the default, or
+    "wren-1.0"), downloaded on first use. Pass `weights` and `embeddings` paths to load
+    your own exported files instead."""
 
-    def __init__(self, weights=None, embeddings=None):
+    def __init__(self, model=None, weights=None, embeddings=None, version=None):
+        if model is None and version is not None:
+            model = version
         if weights is None or embeddings is None:
-            default_weights, default_embeddings = store.ensure()
+            self.release = resolve(model)
+            if self.release.family != "wren":
+                raise LookupError(f"{self.release.name} is not a Wren model")
+            default_weights, default_embeddings = store.ensure(self.release)
             weights = weights or default_weights
             embeddings = embeddings or default_embeddings
 
@@ -71,12 +81,3 @@ class Analyser:
         chunks = [forward_pass(self.conv, self.dense, self.output, texts[i:i + CHUNK], self._lookup)
                   for i in range(0, len(texts), CHUNK)]
         return np.concatenate(chunks) if chunks else np.zeros((0, 5))
-
-    def predict(self, texts):
-        """Star rating 1 to 5. A str gives an int, a list of str gives a list of int."""
-        stars = (np.argmax(self.predict_proba(texts), axis=1) + 1).tolist()
-        return stars[0] if isinstance(texts, str) else stars
-
-    @staticmethod
-    def label(stars):
-        return SENTIMENT_LABELS[int(stars)]

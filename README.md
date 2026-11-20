@@ -1,14 +1,19 @@
-# Sentiment Analyser (Wren)
+# Cadello
 
 **Give it a sentence, and it rates the sentiment from 1 to 5.**
 
-Wren is a text *convolutional neural network* (CNN) built entirely from scratch. The
-convolution layers, the dense layers, the backward pass (how the network works out
-how to improve) and the optimiser (how it applies those improvements) are all written
-by hand using NumPy. There is no PyTorch, TensorFlow, Keras or scikit-learn anywhere
-in the model. **That constraint is the whole point of the project.**
+Cadello is a family of sentiment analysis models built entirely from scratch. Every
+layer, every backward pass (how a network works out how to improve) and every
+optimiser (how it applies those improvements) is written by hand using NumPy and
+checked against finite differences. There is no PyTorch, TensorFlow, Keras or
+scikit-learn anywhere in the models. **That constraint is the whole point of the project.**
 
-It started life as an A-Level Computer Science project. The first version did not
+The models are named after birds, by size. **Wren**, the light class (under 1M
+parameters), is the first and the one this README describes. It is a text
+*convolutional neural network* (CNN), and it is what the `cadello` package and command
+run today. Kestrel, the mid class, is next and will plug into the same package.
+
+Cadello started life as an A-Level Computer Science project. The first version did not
 work, and [the story of why](#what-was-wrong-originally) is at the bottom.
 
 ## Headline result
@@ -54,37 +59,43 @@ exactly what it is and what it is not.
 ### Install
 
 ```bash
-git clone https://github.com/Swylie11/SentimentAnalyser.git
-cd SentimentAnalyser               # pip install . must run from the folder holding pyproject.toml
+git clone https://github.com/Swylie11/cadello.git
+cd cadello                         # pip install . must run from the folder holding pyproject.toml
 python -m venv .venv
 .venv\Scripts\activate             # Windows
 source .venv/bin/activate          # macOS / Linux
 pip install .                      # NumPy is the only dependency (use -e . to develop)
 pip install matplotlib             # only for the charts in tools/visualise.py
+pip install rich                   # only for cadello train and cadello watch
 ```
 
 The pretrained **Wren 1.5** files (about 51 MB, see [Pretrained weights](#pretrained-weights))
 are downloaded automatically the first time you use the model. They are saved to
-`~/.cache/wren`, or to `$WREN_HOME` if you set it. To download them in advance, run
-`wren fetch`. Wren 1.0 is still available: add `--model 1.0` to any command, or use
-`Analyser(version="1.0")` in Python.
+`~/.cache/cadello`, or to `$CADELLO_HOME` if you set it (files an older version saved to
+`~/.cache/wren` or `$WREN_HOME` are found and reused). To download them in advance, run
+`cadello fetch`. Wren 1.0 is still available: add `--model wren-1.0` to any command, or
+use `Analyser("wren-1.0")` in Python. `cadello models` lists every released model.
 
 ### Use it from the command line
 
 ```bash
-wren predict "Does exactly what it says, works great"   # 5   Very positive
-wren predict "waste of money" --proba                    # the star, then P(1★) … P(5★)
-cat reviews.txt | wren predict - --json                  # one review per line, JSON output
-wren eval --data Data/eval_test_multi.jsonl              # exact and within-one accuracy
-wren predict --model 1.0 "waste of money"                # the original Wren 1.0
+cadello predict "Does exactly what it says, works great"   # 5   Very positive
+cadello predict "waste of money" --proba                    # the star, then P(1★) … P(5★)
+cat reviews.txt | cadello predict - --json                  # one review per line, JSON output
+cadello eval --data Data/eval_test_multi.jsonl              # exact and within-one accuracy
+cadello predict --model wren-1.0 "waste of money"           # the original Wren 1.0
+cadello models                                              # every released model
 ```
+
+The package and command were called `wren` before the project was named Cadello. `wren`
+still works for now, with the same arguments, but prints a notice and will be removed.
 
 ### Use it from Python
 
 ```python
-from wren import Analyser
+from cadello import Analyser
 
-wren = Analyser()
+wren = Analyser()                 # the default model, Wren 1.5; Analyser("wren-1.0") for 1.0
 wren.predict("Does exactly what it says, works great")   # 5
 wren.predict(["great", "awful"])                         # [5, 1]
 wren.predict_proba("it is fine")                         # array of shape (1, 5)
@@ -365,7 +376,7 @@ Three things changed between 22.4% and 47.0%:
 ## Training your own model
 
 Training stores everything in four SQLite databases inside a **work directory**. By
-default this is `./wren-work`. You can change it with `--workdir` or `$WREN_WORKDIR`.
+default this is `./runs/wren-work`. You can change it with `--workdir` or `$CADELLO_WORKDIR`.
 
 | Database | Contents |
 |---|---|
@@ -374,7 +385,7 @@ default this is `./wren-work`. You can change it with `--workdir` or `$WREN_WORK
 | `neuron_weights.db` | Dense layer parameters |
 | `convolution_layers.db` | Filter bank parameters |
 
-These aren't in the repository. `wren setup` builds them.
+These aren't in the repository. `cadello setup` builds them.
 
 ### Option A: with the real data
 
@@ -402,19 +413,19 @@ unzip -j Data/wiki-news-300d-1M.vec.zip -d Data/
 
 **3. Build the `.jsonl` files and the databases:**
 
-Wren 1.5's code lives in `src/wren-1.5` and runs through `tools/wren15.py` (the
-installed `wren train` still trains the 1.0 architecture). From the repo root:
+From the repo root (`cadello.wren.train.real_data_setup` is the corpus builder):
 
 ```bash
-python tools/wren15.py data --reviews-gz Data/Software.jsonl.gz Data/Video_Games.jsonl.gz \
-                                         Data/Musical_Instruments.jsonl.gz Data/Office_Products.jsonl.gz \
-                                         Data/Toys_and_Games.jsonl.gz \
-                            --vec        Data/wiki-news-300d-1M.vec \
-                            --per-class  20000 \
-                            --exclude    Data/eval_test_multi.jsonl \
-                            --out-dir    Data/multi
-python tools/wren15.py setup --workdir wren-work \
-                             --reviews Data/multi/TestData.jsonl --embeddings Data/multi/WordEmbeddings.jsonl
+python -m cadello.wren.train.real_data_setup \
+    --reviews-gz Data/Software.jsonl.gz Data/Video_Games.jsonl.gz \
+                 Data/Musical_Instruments.jsonl.gz Data/Office_Products.jsonl.gz \
+                 Data/Toys_and_Games.jsonl.gz \
+    --vec        Data/wiki-news-300d-1M.vec \
+    --per-class  20000 \
+    --exclude    Data/eval_test_multi.jsonl \
+    --out-dir    Data/multi
+cadello setup --workdir runs/wren-work \
+              --reviews Data/multi/TestData.jsonl --embeddings Data/multi/WordEmbeddings.jsonl
 ```
 
 `--per-class` is sampled from each file, so this gives 5 × 5 × 20,000 = 500,000 reviews.
@@ -449,7 +460,7 @@ To run the tests, or just to see everything work end to end, you can generate a
 pool, so the task is learnable and the ratings are balanced:
 
 ```bash
-wren setup --synthetic 3000
+cadello setup --synthetic 3000
 ```
 
 > This tells you **nothing** about real sentiment. It only exists so the tests can run
@@ -458,14 +469,15 @@ wren setup --synthetic 3000
 ### Run training
 
 ```bash
-python tools/wren15.py train --workdir wren-work --batches 45000 --seeds 0 1   # add --yes to skip the confirmation
-python tools/wren15.py watch --workdir wren-work                               # live stats, in a second window
+cadello train --workdir runs/wren-work --batches 45000 --seeds 0 1   # add --yes to skip the confirmation
+cadello watch --workdir runs/wren-work                               # live stats, in a second window
+cadello demo                                                         # the watch panel on a fake run; trains nothing
 ```
 
 `bash tools/train.sh` does the whole thing unattended (data, databases, multi-seed
 training) and keeps Windows awake while it runs. When training ends, the saved model
 is scored once on `Data/eval_test_multi.jsonl` and the run is appended to
-`evaluation/wren15_history.jsonl`. `wren train` still trains the Wren 1.0 architecture.
+`evaluation/wren15_history.jsonl`. `cadello train` trains the Wren 1.5 architecture.
 
 > **⚠️ Training overwrites the existing model.** It resets every weight and filter,
 > which destroys whatever model was in the work directory. To protect you, it asks
@@ -497,7 +509,7 @@ fixed random seed), so it is identical on every run.
 ## Pretrained weights
 
 Each release is two portable files, published as assets on the matching GitHub release
-rather than committed to the repository. `wren` downloads the ones it needs and checks
+rather than committed to the repository. `cadello` downloads the ones it needs and checks
 their sha256.
 
 | Release | File | Contents |
@@ -507,7 +519,7 @@ their sha256.
 | `v1.0` | `wren-1.0-weights.npz` | The filter bank and dense layer parameters (3.7 MB) |
 | | `wren-1.0-embeddings.npz` | The fastText vectors for the 37,498 words Wren 1.0 knows (27.4 MB) |
 
-Checksums and full details are in `models/wren-1.5/MODEL.md` and `models/wren-1.0/MODEL.md`.
+Checksums and full details are in `releases/wren/1.5/MODEL.md` and `releases/wren/1.0/MODEL.md`.
 
 To export your own trained model:
 
@@ -553,6 +565,7 @@ chain rule is the calculus rule that backpropagation is built on.)
 python tests/test_gradients.py              # dense layers
 python tests/test_filterbank_gradients.py   # filter bank layers
 python tests/test_predict.py                # Analyser on the shipped Wren 1.5 and 1.0 files
+python tests/test_registry.py               # model names, file lookup and the command line
 ```
 
 None of these need a database or any data.
@@ -574,7 +587,7 @@ network is wired together correctly. A correctly built network with no regularis
 This one does need the databases:
 
 ```bash
-wren setup --synthetic 400                              # first, in a scratch work directory
+cadello setup --synthetic 400                              # first, in a scratch work directory
 python tests/test_overfit.py                            # 200 reviews, 60 epochs
 python tests/test_overfit.py --reviews 40 --epochs 40   # quicker
 ```
@@ -595,7 +608,7 @@ python evaluation/build_test_set.py --reviews-gz Data/Software.jsonl.gz
 # Wren 1.5's test set: the same five categories as the training corpus
 python evaluation/build_test_set.py --reviews-gz Data/Software.jsonl.gz Data/Video_Games.jsonl.gz \
     Data/Musical_Instruments.jsonl.gz Data/Office_Products.jsonl.gz Data/Toys_and_Games.jsonl.gz \
-    --db wren-work-multi/test_data.db --out Data/eval_test_multi.jsonl
+    --db <work dir set up from Data/multi>/test_data.db --out Data/eval_test_multi.jsonl
 python evaluation/evaluate.py                  # the detailed report for a Wren 1.0 work directory
 python evaluation/mcnemar.py                   # Wren 1.0 vs 1.5 on the same reviews, with McNemar's test
 python evaluation/tests/test_evaluation.py     # quick checks, no real data needed
@@ -606,16 +619,26 @@ python evaluation/tests/test_evaluation.py     # quick checks, no real data need
 ## Repository layout
 
 ```
-src/wren/      the package: Analyser (model.py, loads 1.5 or 1.0), the CLI (cli.py),
-               text cleaning, layers/, and train/ (the Wren 1.0 training code)
-src/wren-1.5/  Wren 1.5's training code: AdamW, dropout, multi-seed runs, live dashboard
-tools/         wren15.py: runs the Wren 1.5 training code; train.sh: unattended training
+src/cadello/   the package: Analyser (analyser.py, the interface every model shares),
+               registry.py (every released model by name), store.py (finds or
+               downloads a model's files), the CLI (cli.py)
+  wren/        the Wren model class: model.py (WrenAnalyser), text cleaning, layers/,
+               and train/ (Wren 1.5 training: AdamW, dropout, multi-seed runs, live
+               dashboard, the corpus builder)
+src/wren/      the old package name, kept so `from wren import Analyser` still works
+tools/         train.sh: unattended training
                export_model.py / export_wren15.py: turn the databases into the portable
                Wren 1.0 / 1.5 files
                visualise.py: charts of results and training runs (needs matplotlib)
-docs/          PLAN.md, the packaging plan
+               demo.py: type reviews and see Wren 1.5's rating in the terminal
+               web.py: the same as a local web page at http://localhost:8000
+               promo_videos.py: release videos built from the evaluation results
 tests/         gradient checks, the overfit test, and prediction checks
-evaluation/    fresh test set builder, evaluation script, and logs of the training runs
+evaluation/    fresh test set builder, evaluation and McNemar scripts, and logs of the
+               training runs
+releases/      model cards for each release: wren/1.0, wren/1.5 (weights are release assets)
+docs/charts/   generated charts and videos (not tracked)
+runs/          training work directories (not tracked); new runs default to runs/wren-work
 ```
 
 ---
@@ -626,13 +649,11 @@ These are listed roughly in order of how likely they are to help:
 
 1. **Fix 1★ and 4★.** Wren 1.5 lost 6 and 10 points of recall on these while gaining
    on 2★ and 5★. The middle ratings are still the weak spot (38 to 47% recall).
-2. **Merge the two code bases**, so `wren train` trains the 1.5 architecture and
-   `src/wren-1.5` can go.
-3. **Deduplicate the training corpus**, and split the data by product or reviewer
+2. **Deduplicate the training corpus**, and split the data by product or reviewer
    rather than by individual review. That way validation can't share products with
    training.
-4. **Add more filters or more window sizes**, and let the model train the embeddings.
-5. **Speed up the training loop**, so each experiment isn't a four-hour wait per seed.
+3. **Add more filters or more window sizes**, and let the model train the embeddings.
+4. **Speed up the training loop**, so each experiment isn't a four-hour wait per seed.
 
 ---
 

@@ -1,6 +1,6 @@
 # Evaluation
 
-The 52.6% validation figure from the training log is soft: `wren train` picked its best
+The 52.6% validation figure from the training log is soft: `cadello train` picked its best
 checkpoint using the first 300 validation reviews, and no review was held out from
 that choice. These scripts measure the saved model on reviews it has never seen.
 
@@ -14,7 +14,7 @@ From the repo root, with the virtual environment active:
 # 1. Fresh test set: 2,000 balanced reviews, none of them in the work directory's test_data.db
 python evaluation/build_test_set.py --reviews-gz Data/Software.jsonl.gz
 
-# 2. Evaluate the weights currently in the work directory (`--model-dir`, default `sentiment/`)
+# 2. Evaluate the weights currently in the work directory (`--model-dir`, default `runs/wren-1.0/`)
 python evaluation/evaluate.py
 ```
 

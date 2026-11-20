@@ -1,11 +1,11 @@
-"""Training dashboard: a live progress bar while training, and `wren watch` beside it.
+"""Training dashboard: a live progress bar while training, and `cadello watch` beside it.
 
 While training, the terminal shows a banner, then one progress bar per seed with a
 spinner that keeps turning during validation. Notable events print above the bars.
 Without a terminal (piped through tee, or under the tests) it prints plain lines
 instead. Every message is also appended to a log file, if one is given.
 
-Training also rewrites <workdir>/status.json as it goes. `wren watch` renders that file
+Training also rewrites <workdir>/status.json as it goes. `cadello watch` renders that file
 as a live stats panel in a second window. The watcher only reads, so it can't affect
 training. For runs from before status.json existed, it reads the training log instead.
 """

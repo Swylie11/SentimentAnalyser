@@ -1,4 +1,4 @@
-"""Multi-seed training checks for Wren 1.5 (`wren train --seeds`).
+"""Multi-seed training checks for Wren 1.5 (`cadello train --seeds`).
 
 A seed must change the weight initialisation and dropout masks, and nothing about
 the data. The champion rule must save a run only when it beats every earlier one.
@@ -9,7 +9,6 @@ setup and leaves the work directory alone:
     python tests/test_multi_seed.py
 """
 
-import importlib.util
 import json
 import os
 import sys
@@ -17,15 +16,9 @@ import tempfile
 
 import numpy as np
 
-# src/wren-1.5 isn't a valid package name, so load it by path as `wren15`.
 HERE = os.path.dirname(os.path.abspath(__file__))
-PACKAGE_DIR = os.path.join(HERE, "..", "src", "wren-1.5")
-spec = importlib.util.spec_from_file_location(
-    "wren15", os.path.join(PACKAGE_DIR, "__init__.py"), submodule_search_locations=[PACKAGE_DIR])
-sys.modules["wren15"] = module = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(module)
 
-from wren15.train import comms as com, init_databases, loop  # noqa: E402
+from cadello.wren.train import comms as com, init_databases, loop
 
 BATCH_SIZE = 4
 NUM_BATCHES = 3

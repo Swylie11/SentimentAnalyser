@@ -5,7 +5,8 @@
 __pycache__/
 *.pyc
 .venv/
-venv/
+build/
+*.egg-info/
 
 # IDE
 .idea/
@@ -13,17 +14,11 @@ venv/
 # Downloaded datasets
 Data/
 
+# Training work directories (release runs, trials, new runs).
+runs/
+
 # Model artifacts are distributed as release assets, not committed.
-models/*/*.npz
-wren-work/
-build/
-*.egg-info/
-charts/
+releases/**/*.npz
 
-# In-house research (specs, notes); only released model files get tracked.
-models/kestrel/
-models/wren-1.5/*
-!models/wren-1.5/MODEL.md
-
-# Personal feature specs / notes.
-specs/
+# Generated charts and videos.
+docs/charts/

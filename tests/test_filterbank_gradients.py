@@ -18,7 +18,7 @@ import sys
 
 import numpy as np
 
-from wren.layers.filter_bank import FilterBankLayer
+from cadello.wren.layers.filter_bank import FilterBankLayer
 
 TOLERANCE = 1e-5
 EPSILON = 1e-6

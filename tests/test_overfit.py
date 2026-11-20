@@ -10,7 +10,7 @@ actually descend its loss.
 
 Unlike the gradient checks, this one needs the databases. Build them first:
 
-    wren setup --synthetic 400
+    cadello setup --synthetic 400
 
 Then run:
 
@@ -25,11 +25,11 @@ import time
 
 import numpy as np
 
-from wren import text as wvc
-from wren.config import FILTER_BANK_CONFIG
-from wren.layers.filter_bank import FilterBankLayer
-from wren.layers.neural import NeuralLayer
-from wren.train import comms as com
+from cadello.wren import text as wvc
+from cadello.wren.config import FILTER_BANK_CONFIG, HIDDEN_WIDTHS
+from cadello.wren.layers.filter_bank import FilterBankLayer
+from cadello.wren.layers.neural import NeuralLayer
+from cadello.wren.train import comms as com
 
 NUM_CLASSES = 5
 
@@ -45,19 +45,14 @@ def build_network(seed):
 
     conv_layers = [FilterBankLayer(layer_num, region_size, num_filters)
                   for layer_num, region_size, num_filters in FILTER_BANK_CONFIG]
-    dense_layers = [NeuralLayer(n) for n in range(1, 6)]
-    output_layer = NeuralLayer(6)
+    dense_layers = [NeuralLayer(n) for n in range(1, len(HIDDEN_WIDTHS) + 1)]
+    output_layer = NeuralLayer(len(HIDDEN_WIDTHS) + 1)
     all_layers = dense_layers + [output_layer]
 
     for layer in conv_layers:
         layer.initialize_values()
     for layer in all_layers:
         layer.initialise_values()
-
-    for layer in conv_layers:
-        layer.fetchKernel()
-    for layer in all_layers:
-        layer.fetch_values()
 
     return conv_layers, dense_layers, output_layer, all_layers
 
@@ -90,9 +85,9 @@ def train_step(conv_layers, dense_layers, output_layer, all_layers,
         start_column = end_column
 
     for layer in all_layers:
-        layer.adjust_values(learning_rate)
+        layer.adjust_values(learning_rate, 0.0)  # no weight decay: memorising is the point
     for layer in conv_layers:
-        layer.adjust_kernel_values(learning_rate)
+        layer.adjust_kernel_values(learning_rate, 0.0)
 
     return loss, correct
 
@@ -104,7 +99,7 @@ def run_overfit(num_reviews, epochs, batch_size, learning_rate, seed=0, quiet=Fa
     if len(review_ids) < num_reviews:
         raise AssertionError(
             f"only {len(review_ids)} reviews in the database, needed {num_reviews}. "
-            "Run `wren setup` with a larger --synthetic count, or import real data.")
+            "Run `cadello setup` with a larger --synthetic count, or import real data.")
 
     rows = com.fetch_batch(review_ids)
     texts = [row[1] for row in rows]
@@ -152,7 +147,7 @@ def main():
     parser.add_argument("--reviews", type=int, default=200)
     parser.add_argument("--epochs", type=int, default=60)
     parser.add_argument("--batch-size", type=int, default=20)
-    parser.add_argument("--learning-rate", type=float, default=0.03)
+    parser.add_argument("--learning-rate", type=float, default=1e-3)
     parser.add_argument("--seed", type=int, default=0)
     args = parser.parse_args()
 

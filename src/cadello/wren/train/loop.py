@@ -1,4 +1,4 @@
-"""Trains a new Wren model. Run it with `wren train`.
+"""Trains a new Wren model. Run it with `cadello train`.
 
 Architecture: embeddings -> parallel filter bank branches (Kim 2014 style: several
 region sizes, each a bank of filters sliding along the word axis only, ReLU, global
@@ -70,7 +70,7 @@ QUICK_VALIDATION_SIZE = 1000
 LOSS_EVERY = 50
 
 # Where training's output goes. train() swaps in one that draws the live progress bar,
-# logs to a file and writes status.json for `wren watch`. run_once called on its own, as
+# logs to a file and writes status.json for `cadello watch`. run_once called on its own, as
 # the tests do, gets this plain one.
 dash = Dashboard()
 
@@ -514,7 +514,7 @@ def train(reviews_per_batch, num_batches, assume_yes=False, seeds=None, log_path
                  "optimiser": f"AdamW, weight decay {WEIGHT_DECAY}",
                  "dropout": f"features {FilterBankLayer.dropout_rate}, hidden {NeuralLayer.dropout_rate}",
                  "hidden": HIDDEN_WIDTHS},
-                f'python tools/wren15.py watch --workdir "{short_path(com.DB_DIR)}"')
+                f'cadello watch --workdir "{short_path(com.DB_DIR)}"')
     dash.start(seeds or [None], num_batches, reviews_per_batch)
     try:
         results = _train(layers, reviews_per_batch, num_batches, seeds)

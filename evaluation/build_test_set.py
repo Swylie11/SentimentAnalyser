@@ -1,6 +1,6 @@
 """Builds a fresh, balanced test set the model has never seen.
 
-The training corpus (sentiment/test_data.db) was split into train and validation,
+The training corpus (runs/wren-1.0/test_data.db) was split into train and validation,
 and the validation set was also used to pick the best checkpoint. This draws new
 reviews from the Amazon dump and drops any whose text already appears in that
 database, so the result is untouched by training and by checkpoint selection.
@@ -72,7 +72,7 @@ def main():
     parser.add_argument("--reviews-gz", nargs="+", default=[os.path.join(REPO, "Data", "Software.jsonl.gz")],
                         help="One or more Amazon dumps; --per-class is split evenly across them, "
                              "so pass the same categories the training corpus used")
-    parser.add_argument("--db", default=os.path.join(REPO, "sentiment", "test_data.db"),
+    parser.add_argument("--db", default=os.path.join(REPO, "runs", "wren-1.0", "test_data.db"),
                         help="Training database whose reviews must be excluded (read only)")
     parser.add_argument("--out", default=os.path.join(REPO, "Data", "eval_test.jsonl"))
     parser.add_argument("--per-class", type=int, default=400,
@@ -85,7 +85,7 @@ def main():
 
     # Imported here, not at module level, so evaluate.py can import normalise()
     # without loading the training code.
-    from wren.train import real_data_setup as rds
+    from cadello.wren.train import real_data_setup as rds
 
     known = known_texts(args.db)
     print(f"{len(known):,} distinct training reviews will be excluded.")

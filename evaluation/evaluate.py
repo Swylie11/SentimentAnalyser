@@ -158,17 +158,19 @@ def file_fingerprint(directory):
 
 def load_model(model_dir):
     """Loads the stored weights from the databases in model_dir (the work directory)."""
-    from wren import text as wvc
-    from wren.config import FILTER_BANK_CONFIG
-    from wren.layers.filter_bank import FilterBankLayer
-    from wren.layers.neural import NeuralLayer
-    from wren.train import comms as com
-    from wren.train import loop as model
+    from cadello.wren import text as wvc
+    from cadello.wren.config import FILTER_BANK_CONFIG
+    from cadello.wren.layers.filter_bank import FilterBankLayer
+    from cadello.wren.layers.neural import NeuralLayer
+    from cadello.wren.train import comms as com
+    from cadello.wren.train import loop as model
     com.set_db_dir(model_dir)
 
     conv = [FilterBankLayer(n, r, f) for n, r, f in FILTER_BANK_CONFIG]
-    dense = [NeuralLayer(n) for n in range(1, 6)]
-    out = NeuralLayer(6)
+    # Wren 1.0 work dirs hold 6 dense layers, 1.5 ones 2; the output layer is the last.
+    num_dense = com.connect("neuron_weights.db").execute("SELECT COUNT(*) FROM weights").fetchone()[0]
+    dense = [NeuralLayer(n) for n in range(1, num_dense)]
+    out = NeuralLayer(num_dense)
     for layer in conv:
         layer.fetchKernel()
     for layer in dense + [out]:
@@ -232,7 +234,7 @@ def show(title, m):
 def main():
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--model-dir", default=os.path.join(REPO, "sentiment"),
+    parser.add_argument("--model-dir", default=os.path.join(REPO, "runs", "wren-1.0"),
                         help="Work directory holding the four .db files")
     parser.add_argument("--test-set", default=os.path.join(REPO, "Data", "eval_test.jsonl"))
     parser.add_argument("--train-slice", type=int, default=2000,

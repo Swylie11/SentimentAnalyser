@@ -1,6 +1,6 @@
 """Creates and seeds the SQLite databases the model reads from.
 
-The four .db files are not kept in the repository, so `wren setup` builds them in
+The four .db files are not kept in the repository, so `cadello setup` builds them in
 the work directory. It has two modes:
 
   --synthetic   Builds a small self-contained corpus and embedding table. This
@@ -25,15 +25,12 @@ import sqlite3
 import numpy as np
 
 from . import comms
-from ..config import FILTER_BANK_CONFIG, NUM_CLASSES
+from ..config import FILTER_BANK_CONFIG, HIDDEN_WIDTHS, NUM_CLASSES
 
 
 def _db(name):
     return os.path.join(comms.DB_DIR, name)
 
-# Widths of the dense stack after the flatten. The input width is measured, and
-# the final 5 is the number of star ratings.
-HIDDEN_WIDTHS = [256, 128, 64, 32, 16]
 EMBEDDING_DIM = 300
 MAX_WORDS = 200
 
@@ -97,7 +94,8 @@ def sanity_check_filter_banks():
 
 
 def seed_layers(input_width):
-    """Writes correctly shaped placeholder weights for all six dense layers.
+    """Writes correctly shaped placeholder weights for every dense layer in
+    HIDDEN_WIDTHS plus the output layer, replacing any rows left by a different shape.
 
     Values are zeros; main.py calls initialise_values() to overwrite them with a
     He-scaled draw. Only the shape matters here.
@@ -105,6 +103,8 @@ def seed_layers(input_width):
     widths = [input_width] + HIDDEN_WIDTHS + [NUM_CLASSES]
 
     with sqlite3.connect(_db("neuron_weights.db")) as conn:
+        # Without this a deeper earlier shape leaves stale rows past the last layer.
+        conn.execute("DELETE FROM weights")
         for layer_num in range(1, len(widths)):
             n_in = widths[layer_num - 1]
             n_out = widths[layer_num]
@@ -212,7 +212,7 @@ def seed_synthetic(num_reviews, seed):
 
 
 def setup(synthetic=None, seed=0, embeddings=None, reviews=None):
-    """Builds the databases in comms.DB_DIR. Called by `wren setup`."""
+    """Builds the databases in comms.DB_DIR. Called by `cadello setup`."""
     os.makedirs(comms.DB_DIR, exist_ok=True)
     create_schemas()
     seed_kernels()

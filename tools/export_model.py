@@ -25,13 +25,13 @@ import sys
 
 import numpy as np
 
-from wren import Analyser
-from wren import text as wvc
-from wren.config import FILTER_BANK_CONFIG, NUM_DENSE
-from wren.layers.filter_bank import FilterBankLayer
-from wren.layers.neural import NeuralLayer
-from wren.train import comms as com
-from wren.train import loop as model
+from cadello import Analyser
+from cadello.wren import text as wvc
+from cadello.wren.config import FILTER_BANK_CONFIG, NUM_DENSE_1_0
+from cadello.wren.layers.filter_bank import FilterBankLayer
+from cadello.wren.layers.neural import NeuralLayer
+from cadello.wren.train import comms as com
+from cadello.wren.train import loop as model
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -86,7 +86,7 @@ def export_weights(sentiment_dir, out_path):
             arrays[f"conv{layer_num}_kernel"] = np.array(ast.literal_eval(kernel), dtype=np.float64)
             arrays[f"conv{layer_num}_bias"] = np.array(ast.literal_eval(bias), dtype=np.float64)
     with read_only(os.path.join(sentiment_dir, "neuron_weights.db")) as conn:
-        for layer_num in range(1, NUM_DENSE + 1):
+        for layer_num in range(1, NUM_DENSE_1_0 + 1):
             weights, biases = conn.execute(
                 "SELECT weights, biases FROM weights WHERE LayerNum = ?", (layer_num,)).fetchone()
             arrays[f"dense{layer_num}_weights"] = np.array(ast.literal_eval(weights), dtype=np.float64)
@@ -98,7 +98,7 @@ def export_weights(sentiment_dir, out_path):
 
 def layers_from_database():
     conv = [FilterBankLayer(n, r, f) for n, r, f in FILTER_BANK_CONFIG]
-    dense = [NeuralLayer(n) for n in range(1, NUM_DENSE + 1)]
+    dense = [NeuralLayer(n) for n in range(1, NUM_DENSE_1_0 + 1)]
     for layer in conv:
         layer.fetchKernel()
     for layer in dense:
@@ -115,7 +115,7 @@ def verify(weights_path, embeddings_path, texts, labels):
     """Same reviews through the databases and through the exported files (via the shipped
     Analyser, which never touches a database); the outputs must match."""
     reference = database_probabilities(texts)
-    exported = Analyser(weights_path, embeddings_path).predict_proba(texts)
+    exported = Analyser(weights=weights_path, embeddings=embeddings_path).predict_proba(texts)
 
     worst = float(np.abs(reference - exported).max())
     labels = np.asarray(labels)
@@ -138,8 +138,8 @@ def main():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--vec", default=os.path.join(REPO, "Data", "wiki-news-300d-1M.vec"))
     p.add_argument("--eval", default=os.path.join(REPO, "Data", "eval_test.jsonl"))
-    p.add_argument("--sentiment-dir", default=os.path.join(REPO, "sentiment"))
-    p.add_argument("--out", default=os.path.join(REPO, "models", "wren-1.0"))
+    p.add_argument("--sentiment-dir", default=os.path.join(REPO, "runs", "wren-1.0"))
+    p.add_argument("--out", default=os.path.join(REPO, "releases", "wren", "1.0"))
     p.add_argument("--check", type=int, default=2000, help="eval reviews to verify on (0 skips)")
     args = p.parse_args()
 

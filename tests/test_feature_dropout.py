@@ -4,21 +4,9 @@ gradient through the same mask the forward pass used. Needs no databases:
     python tests/test_feature_dropout.py
 """
 
-import importlib.util
-import os
-import sys
-
 import numpy as np
 
-# src/wren-1.5 isn't a valid package name, so load it by path as `wren15`.
-HERE = os.path.dirname(os.path.abspath(__file__))
-PACKAGE_DIR = os.path.join(HERE, "..", "src", "wren-1.5")
-spec = importlib.util.spec_from_file_location(
-    "wren15", os.path.join(PACKAGE_DIR, "__init__.py"), submodule_search_locations=[PACKAGE_DIR])
-sys.modules["wren15"] = module = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(module)
-
-from wren15.layers.filter_bank import FilterBankLayer  # noqa: E402
+from cadello.wren.layers.filter_bank import FilterBankLayer
 
 EPSILON = 1e-6
 MASK_SEED = 7

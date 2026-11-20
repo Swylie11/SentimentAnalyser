@@ -86,7 +86,7 @@ def test_end_to_end():
         os.makedirs(model_dir)
 
         run = lambda *a: subprocess.run([sys.executable, *a], cwd=tmp, capture_output=True, text=True)
-        built = run("-m", "wren.cli", "setup", "--workdir", model_dir, "--synthetic", "300")
+        built = run("-m", "cadello", "setup", "--workdir", model_dir, "--synthetic", "300")
         check("synthetic model builds", built.returncode == 0)
 
         # A test set drawn from the synthetic vocabulary.

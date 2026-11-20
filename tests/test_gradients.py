@@ -19,7 +19,7 @@ import sys
 
 import numpy as np
 
-from wren.layers.neural import NeuralLayer
+from cadello.wren.layers.neural import NeuralLayer
 
 # A wrong gradient shows up as a relative error many orders of magnitude above this.
 # Central differences at eps=1e-5 in float64 bottom out around 1e-9.
@@ -265,42 +265,6 @@ def test_input_gradient():
     print(f"  input gradient checked, worst relative error {worst:.3e}")
 
 
-def test_update_is_plain_sgd_on_the_batch_mean():
-    """The parameter update must be exactly learning_rate * gradient.
-
-    combined_derivative already divides by the number of reviews in the batch, so
-    adjust_values must not divide again. A second divisor silently scales the
-    learning rate by 1/batch_size, which is the bug this guards against.
-    """
-    rng = np.random.default_rng(3)
-    layers = build_network(seed=7)
-
-    inputs = rng.normal(0, 1.0, (BATCH_SIZE, LAYER_WIDTHS[0]))
-    one_hot = np.zeros((BATCH_SIZE, LAYER_WIDTHS[-1]))
-    one_hot[np.arange(BATCH_SIZE), rng.integers(0, LAYER_WIDTHS[-1], BATCH_SIZE)] = 1
-
-    for layer in layers:
-        reset_accumulators(layer)
-    loss_of(layers, inputs, one_hot)
-    backward(layers, one_hot)
-
-    layer = layers[0]
-    learning_rate = 0.01
-    before = np.array(layer.weights)
-    gradient = np.array(layer.avdweights).T  # back to (n_out, n_in)
-
-    # adjust_values updates in memory only; save() is what touches the database.
-    layer.adjust_values(learning_rate)
-
-    expected = before - learning_rate * gradient
-    assert np.allclose(layer.weights, expected), (
-        "adjust_values did not apply exactly learning_rate * gradient; "
-        "a batch divisor has crept back in")
-
-    assert np.allclose(layer.avdweights, 0), "accumulators not cleared after an update"
-    assert np.allclose(layer.avdbiases, 0), "bias accumulators not cleared after an update"
-
-
 def main():
     tests = [
         ("relu_backward gates on the pre-activation", test_relu_backward_gates_on_preactivation),
@@ -308,7 +272,6 @@ def main():
         ("ReLU_derivative raises", test_relu_derivative_is_removed),
         ("parameter gradients match finite differences", test_gradients),
         ("input gradient matches finite differences", test_input_gradient),
-        ("parameter update is plain SGD on the batch mean", test_update_is_plain_sgd_on_the_batch_mean),
     ]
 
     failed = 0

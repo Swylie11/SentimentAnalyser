@@ -13,7 +13,7 @@ cd "$(dirname "$0")/.."
 SEEDS=${SEEDS:-"0 1 2 3 4"}
 BATCHES=${BATCHES:-15000}
 BATCH_SIZE=${BATCH_SIZE:-32}
-WORKDIR=${WORKDIR:-wren-work}
+WORKDIR=${WORKDIR:-runs/wren-work}
 
 mkdir -p "$WORKDIR"
 LOG="$WORKDIR/train_$(date +%Y%m%d-%H%M%S).log"
@@ -27,26 +27,25 @@ AWAKE=$!
 trap 'kill $AWAKE 2>/dev/null || true' EXIT
 
 # Data/TestData.jsonl should be Wren 1.0's training set, exported from
-# sentiment/test_data.db (test_dataset4), because Data/eval_test.jsonl excludes exactly
+# runs/wren-1.0/test_data.db (test_dataset4), because Data/eval_test.jsonl excludes exactly
 # those reviews. This fallback samples a DIFFERENT 100,000 that overlap 141 of the test
 # reviews, so only rely on it if you rebuild the test set too.
 if [[ ! -f Data/TestData.jsonl || ! -f Data/WordEmbeddings.jsonl ]]; then
     echo "== Building Data/TestData.jsonl and Data/WordEmbeddings.jsonl =="
-    # PYTHONPATH=src: the pip-installed wren leaves out wren.train, so use the repo's copy.
-    PYTHONPATH=src python -u -m wren.train.real_data_setup --reviews-gz Data/Software.jsonl.gz \
+    PYTHONPATH=src python -u -m cadello.wren.train.real_data_setup --reviews-gz Data/Software.jsonl.gz \
         --vec Data/wiki-news-300d-1M.vec --per-class 20000 --seed 0 --out-dir Data
 fi
 
 if [[ ! -f "$WORKDIR/word_embeddings.db" ]]; then
     echo "== Building the databases in $WORKDIR =="
-    python -u tools/wren15.py setup --workdir "$WORKDIR" \
+    PYTHONPATH=src python -u -m cadello setup --workdir "$WORKDIR" \
         --reviews Data/TestData.jsonl --embeddings Data/WordEmbeddings.jsonl
 fi
 
 echo "== Training: seeds $SEEDS, $BATCHES batches of $BATCH_SIZE =="
 # --yes: the overwrite prompt would otherwise wait all night. A backup is still made.
 # shellcheck disable=SC2086  # SEEDS is meant to split into separate arguments
-python -u tools/wren15.py train --workdir "$WORKDIR" --batches "$BATCHES" \
+PYTHONPATH=src python -u -m cadello train --workdir "$WORKDIR" --batches "$BATCHES" \
     --batch-size "$BATCH_SIZE" --seeds $SEEDS --yes
 
 echo "== Done. Loss video: python tools/visualise.py loss --file $WORKDIR/seed_runs.json =="

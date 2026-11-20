@@ -1,4 +1,4 @@
-"""Training dashboard checks for Wren 1.5: status.json, the log, and `wren watch`.
+"""Training dashboard checks for Wren 1.5: status.json, the log, and `cadello watch`.
 
 Trains two tiny seeds on synthetic data in a temporary folder, then checks what the
 watcher would see, both from status.json and from the log alone:
@@ -6,25 +6,15 @@ watcher would see, both from status.json and from the log alone:
     python tests/test_dashboard.py
 """
 
-import importlib.util
 import io
 import json
 import os
-import sys
 import tempfile
 import time
 
-# src/wren-1.5 isn't a valid package name, so load it by path as `wren15`.
-HERE = os.path.dirname(os.path.abspath(__file__))
-PACKAGE_DIR = os.path.join(HERE, "..", "src", "wren-1.5")
-spec = importlib.util.spec_from_file_location(
-    "wren15", os.path.join(PACKAGE_DIR, "__init__.py"), submodule_search_locations=[PACKAGE_DIR])
-sys.modules["wren15"] = module = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(module)
+from rich.console import Console
 
-from rich.console import Console  # noqa: E402
-
-from wren15.train import comms as com, dashboard, init_databases, loop  # noqa: E402
+from cadello.wren.train import comms as com, dashboard, init_databases, loop
 
 
 def text_of(renderable):

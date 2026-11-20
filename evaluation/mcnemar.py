@@ -3,12 +3,11 @@
 Also checks the test set for overlap with Wren 1.5's training reviews, because
 the test set is checked against both models' training data.
 
-    python evaluation/mcnemar.py                        # Wren 1.5 from wren-work-big
-    python evaluation/mcnemar.py --wren15 wren-work-multi
+    python evaluation/mcnemar.py                        # Wren 1.5 from runs/wren-1.5
+    python evaluation/mcnemar.py --wren15 runs/wren-work
 """
 
 import argparse
-import importlib.util
 import json
 import math
 import os
@@ -20,6 +19,7 @@ import numpy as np
 from build_test_set import normalise
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.join(REPO, "src"))  # runs from a checkout without pip install
 
 
 def mcnemar(b, c):
@@ -33,12 +33,8 @@ def mcnemar(b, c):
 
 
 def load_wren15(workdir):
-    package = os.path.join(REPO, "src", "wren-1.5")
-    spec = importlib.util.spec_from_file_location(
-        "wren15", os.path.join(package, "__init__.py"), submodule_search_locations=[package])
-    sys.modules["wren15"] = module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    from wren15.train import comms, loop
+    """Wren 1.5 straight from a training work directory's databases."""
+    from cadello.wren.train import comms, loop
     comms.set_db_dir(workdir)
     conv, dense, out = loop.build_layers()
     for layer in conv:
@@ -51,7 +47,7 @@ def load_wren15(workdir):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--data", default=os.path.join(REPO, "Data", "eval_test_multi.jsonl"))
-    parser.add_argument("--wren15", default=os.path.join(REPO, "wren-work-big"))
+    parser.add_argument("--wren15", default=os.path.join(REPO, "runs", "wren-1.5"))
     parser.add_argument("--out", default=os.path.join(REPO, "evaluation", "mcnemar.json"))
     args = parser.parse_args()
 
@@ -61,14 +57,13 @@ def main():
     texts = [r["text"] for r in records]
 
     trained = set()
-    for workdir in (os.path.join(REPO, "sentiment"), args.wren15):
+    for workdir in (os.path.join(REPO, "runs", "wren-1.0"), args.wren15):
         with sqlite3.connect(f"file:{os.path.join(workdir, 'test_data.db')}?mode=ro", uri=True) as conn:
             trained |= {normalise(t) for (t,) in conn.execute("SELECT text FROM test_dataset4")}
     leaked = np.array([normalise(t) in trained for t in texts])
 
-    sys.path.insert(0, os.path.join(REPO, "src"))
-    from wren import Analyser  # Wren 1.0, released weights from ~/.cache/wren
-    pred10 = np.asarray(Analyser().predict(texts))
+    from cadello import Analyser
+    pred10 = np.asarray(Analyser("wren-1.0").predict(texts))  # the released Wren 1.0 files
     pred15 = load_wren15(args.wren15)(texts)
 
     def compare(mask):

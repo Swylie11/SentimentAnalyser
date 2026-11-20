@@ -1,4 +1,4 @@
-"""Builds the two .jsonl files `wren setup` imports, from real source data.
+"""Builds the two .jsonl files `cadello setup` imports, from real source data.
 
 This replaces the hardcoded-path scripts (TestDataSetup.py, WordEmbeddingsSetup.py)
 for the Amazon Reviews 2023 dump and the fastText wiki-news-300d-1M embeddings file. It differs from them
@@ -26,7 +26,7 @@ would never read most of. Words absent from fastText keep the existing behaviour
 Comms.fetch_embedding returns a zero vector for them.
 
 Usage:
-    python -m wren.train.real_data_setup --reviews-gz  ../../Data/Software.jsonl.gz \
+    python -m cadello.wren.train.real_data_setup --reviews-gz  ../../Data/Software.jsonl.gz \
                             --vec         ../../Data/wiki-news-300d-1M.vec \
                             --per-class   1000 \
                             --out-dir     ../../Data
@@ -257,7 +257,7 @@ def main():
     write_embeddings(args.vec, vocab, embeddings_out)
 
     print("\nNext:")
-    print(f"  wren setup --reviews {reviews_out} --embeddings {embeddings_out}")
+    print(f"  cadello setup --reviews {reviews_out} --embeddings {embeddings_out}")
 
 
 if __name__ == "__main__":

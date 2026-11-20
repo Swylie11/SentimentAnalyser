@@ -18,9 +18,10 @@ _connections = {}
 _embedding_cache = {}
 
 
-# Directory holding the four training databases. `wren train --workdir` and
-# `wren setup --workdir` set this; the default is ./wren-work, or $WREN_WORKDIR.
-DB_DIR = os.path.abspath(os.environ.get("WREN_WORKDIR", "wren-work"))
+# Directory holding the four training databases. `cadello train --workdir` and
+# `cadello setup --workdir` set this; the default is ./runs/wren-work, or $CADELLO_WORKDIR
+# ($WREN_WORKDIR, its name before the rename, still works).
+DB_DIR = os.path.abspath(os.environ.get("CADELLO_WORKDIR") or os.environ.get("WREN_WORKDIR") or "runs/wren-work")
 
 
 def set_db_dir(path):
@@ -39,7 +40,7 @@ def connect(db_name):
         db_path = os.path.join(DB_DIR, db_name)
         if not os.path.exists(db_path):
             raise FileNotFoundError(
-                f"Database not found: {db_path}. Run `wren setup` to create it.")
+                f"Database not found: {db_path}. Run `cadello setup` to create it.")
         _connections[db_name] = sqlite3.connect(db_path)
     return _connections[db_name]
 
@@ -97,7 +98,7 @@ def fetch_kernel(LayerNum):
         "SELECT kernel, bias FROM kernels WHERE LayerNum = ?", (LayerNum,)).fetchone()
 
     if row is None:
-        raise LookupError(f"No kernel row for LayerNum={LayerNum}. Run `wren setup`.")
+        raise LookupError(f"No kernel row for LayerNum={LayerNum}. Run `cadello setup`.")
     return ast.literal_eval(row[0]), ast.literal_eval(row[1])
 
 
@@ -107,7 +108,7 @@ def fetch_layer(LayerNum):
         "SELECT weights, biases FROM weights WHERE LayerNum = ?", (LayerNum,)).fetchone()
 
     if row is None:
-        raise LookupError(f"No weights row for LayerNum={LayerNum}. Run `wren setup`.")
+        raise LookupError(f"No weights row for LayerNum={LayerNum}. Run `cadello setup`.")
     return [ast.literal_eval(row[0]), ast.literal_eval(row[1])]
 
 

@@ -9,7 +9,7 @@ Then it runs the 2,000 multi-category test reviews through the exported files wi
 shipped Analyser and fails unless every prediction matches evaluation/mcnemar.json, which
 was produced from the databases. Run from the repo root:
 
-    python tools/export_wren15.py [--workdir wren-work-big]
+    python tools/export_wren15.py [--workdir runs/wren-1.5]
 """
 
 import argparse
@@ -24,7 +24,7 @@ import numpy as np
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(REPO, "src"))
-from wren import Analyser  # noqa: E402
+from cadello import Analyser  # noqa: E402
 
 
 def read_only(path):
@@ -41,8 +41,8 @@ def sha256(path):
 
 def main():
     p = argparse.ArgumentParser()
-    p.add_argument("--workdir", default=os.path.join(REPO, "wren-work-big"))
-    p.add_argument("--out", default=os.path.join(REPO, "models", "wren-1.5"))
+    p.add_argument("--workdir", default=os.path.join(REPO, "runs", "wren-1.5"))
+    p.add_argument("--out", default=os.path.join(REPO, "releases", "wren", "1.5"))
     args = p.parse_args()
     weights_path = os.path.join(args.out, "wren-1.5-weights.npz")
     embeddings_path = os.path.join(args.out, "wren-1.5-embeddings.npz")
@@ -72,7 +72,7 @@ def main():
         reference = json.load(f)
     with open(reference["test_set"], encoding="utf-8") as f:
         texts = [json.loads(line)["text"] for line in f if line.strip()]
-    predictions = Analyser(weights_path, embeddings_path).predict(texts)
+    predictions = Analyser(weights=weights_path, embeddings=embeddings_path).predict(texts)
     mismatches = sum(a != b for a, b in zip(predictions, reference["pred15"]))
     accuracy = np.mean(np.array(predictions) == np.array(reference["labels"]))
     print(f"verify: {len(texts)} reviews, {mismatches} predictions differ from the databases, "
